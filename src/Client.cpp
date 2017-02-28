@@ -99,7 +99,7 @@ string Client::recvMsgfromSocket(int _socket){
   return ret;
 }
 int Client::parseCmd(string cmd){
-	stringstream ss(cmd);
+	/**stringstream ss(cmd);
 	string token[ARGN_MAX];
 	int nToken = 0;
 	while (ss >> token[nToken] && nToken < ARGN_MAX) {
@@ -107,10 +107,23 @@ int Client::parseCmd(string cmd){
 	}
 	if (nToken == 0) {
 		exit(-1);
+	}*/
+
+	stringstream ss(cmd);
+	vector<string> tokens;
+	string tkn;
+	while (ss >> tkn) {
+		tokens.push_back(tkn);
+	}
+	if (tokens.size() == 0) {
+		exit(-1);
 	}
 
+
+
 	//Process cmds
-	string cmder = token[0];
+	string cmder = tokens.at(0);
+	int nToken = tokens.size();
 
 	if (cmder == "AUTHOR") {
 		assert(nToken == 1);
@@ -149,13 +162,13 @@ int Client::parseCmd(string cmd){
 	else if (cmder == "LOGIN") {
     cout << "Compare if cmder is LOGIN..."<<endl;
     assert(nToken == 3);
-    onLOGIN(token[1], token[2]);
+    onLOGIN(tokens.at(1), tokens.at(2));
     cout << "Finish onLOGIN execution..."<<endl;
   }
 	else if (cmder == "REFRESH") {assert(nToken == 1); onREFRESH();}
-	else if (cmder == "SEND") {assert(nToken == 3); onSEND(token[1], token[2]);}
-	else if (cmder == "BLOCK") {assert(nToken == 2); onBLOCK(token[1]);}
-	else if (cmder == "UNBLOCK") {assert(nToken == 2); onUNBLOCK(token[1]);}
+	else if (cmder == "SEND") {assert(nToken == 3); onSEND(tokens.at(1), tokens.at(2));}
+	else if (cmder == "BLOCK") {assert(nToken == 2); onBLOCK(tokens.at(1));}
+	else if (cmder == "UNBLOCK") {assert(nToken == 2); onUNBLOCK(tokens.at(1));}
 	else if (cmder == "LOGOUT") {assert(nToken == 1); onLOGOUT();}
 	else if (cmder == "EXIT") {assert(nToken == 1); onEXIT();}
 	else{std::cerr << "XueError: "<< cmder <<" | NO such commander!" << std::endl;}
@@ -219,7 +232,7 @@ string Client::onLOGIN(string _serverIP, string _serverPort){
   // string t = recvMsgfromSocket(serverSocket);
   // cout <<"Recv msg is : "<< t <<endl;
   cout << "Done the request Sending! (if double free or corruption appears again?)"<<endl;
-
+	return "loggedin"; //can be ignored
 }
 string Client::onREFRESH(){}
 string Client::onSEND(string _clientIP, string _msg){}

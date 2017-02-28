@@ -15,7 +15,7 @@ public:
     port_num(_port),
     num_msg_sent(0),
     num_msg_rcv(0),
-    status("NeedInitialize")
+    status("NeedInit")
     {}
 
   string hostname;
