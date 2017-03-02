@@ -33,27 +33,31 @@ void Server::testSortVector(){
     itemTemp = LoggedInListItemServer("highgate", "33", 5499);
     loggedInList.push_back(itemTemp);
 
-    for (size_t i = 0; i < loggedInList.size(); i++) {
-      LoggedInListItemServer t = loggedInList.at(i);
-      cout <<i<< " : "<< t.hostname << " : " << t.ip_addr << " : "<< t.port_num <<endl;
-    }
+    printLoggedInList();
 
     sort(loggedInList.begin(), loggedInList.end());
-    cout << "After Sorted:" << endl;
-    for (size_t i = 0; i < loggedInList.size(); i++) {
-      LoggedInListItemServer t = loggedInList.at(i);
-      cout <<i<< " : "<< t.hostname << " : " << t.ip_addr << " : "<< t.port_num <<endl;
-    }
+    cout << "After Sorted:>>" << endl;
+    printLoggedInList();
 
     rmLoggedInList("35");
-    cout << "After remove 35:" << endl;
-    for (size_t i = 0; i < loggedInList.size(); i++) {
-      LoggedInListItemServer t = loggedInList.at(i);
-      cout <<i<< " : "<< t.hostname << " : " << t.ip_addr << " : "<< t.port_num <<endl;
-    }
+    cout << "After remove 35:>>" << endl;
+    printLoggedInList();
+
 }
 
 int Server::addLoggedInList(LoggedInListItemServer item){
+  //need to deal with the client which is not new but logged-out
+  // return 1 : add
+  // return 2 : update
+
+  int listSize = loggedInList.size();
+  for (int i = 0; i < listSize; i++) {
+    if (loggedInList.at(i).hostname == item.hostname) {
+      loggedInList.at(i).status = "logged-in";
+      return 2;
+    }
+  }
+
   loggedInList.push_back(item);
   sort(loggedInList.begin(), loggedInList.end());
   return 1;
@@ -207,18 +211,19 @@ int Server::start(){
 }
 
 int Server::parseCmd(string cmd){
-	stringstream ss(cmd);
-	string token[ARGN_MAX];
-	int nToken = 0;
-	while (ss >> token[nToken] && nToken < ARGN_MAX) {
-		nToken++;
-	}
-	if (nToken == 0) {
-		exit(-1);
-	}
+  stringstream ss(cmd);
+  vector<string> tokens;
+  string tkn;
+  while (ss >> tkn) {
+    tokens.push_back(tkn);
+  }
+  if (tokens.size() == 0) {
+    exit(-1);
+  }
 
 	//Process cmds
-	string cmder = token[0];
+	string cmder = tokens.at(0);
+  int nToken = tokens.size();
 	if (cmder == "AUTHOR") {
 		assert(nToken == 1);
 		string myUBIT = onAUTHOR();
@@ -254,7 +259,7 @@ int Server::parseCmd(string cmd){
 
 	else if (cmder == "LIST") {assert(nToken == 1); onLIST();}
 	else if (cmder == "STATISTICS") {assert(nToken == 1);onSTATISTICS();}
-	else if (cmder == "BLOCKED") {assert(nToken == 2); onBLOCKED(token[1]);}
+	else if (cmder == "BLOCKED") {assert(nToken == 2); onBLOCKED(tokens.at(0));}
 	else{std::cerr << "XueError: "<< cmder <<" | NO such commander!" << std::endl;}
 }
 
@@ -269,29 +274,33 @@ int Server::parseRequest(int fdaccept, string requestStr){
     exit(-1);
   }
 
+  string rqstCmder = tokens.at(0); //the command of total request string, the first word
+  int nTokens = tokens.size();
   //Process requestStr
-  if (tokens[0] == "LOGIN") {
+  if (rqstCmder == "LOGIN") {
     cout << "[Server::parseRequest] : Request is LOGIN, Processing..." << endl;
     //add to list
-    assert(tokens.size() == 4);
+    assert(nTokens == 4);
 
-    LoggedInListItemServer item = LoggedInListItemServer(tokens[1], tokens[2], atoi(tokens[3].c_str()));
+    LoggedInListItemServer item = LoggedInListItemServer(tokens.at(1), tokens.at(2), atoi(tokens.at(3).c_str()));
     //需要查询一下是否已经有对应的项，re-login会出现的情况
     item.status = "logged-in";
     addLoggedInList(item);
     printLoggedInList();
 
-    // sendMsgtoSocket(fdaccept, "Already Logged in!");
+    sendMsgtoSocket(fdaccept, "Already Logged in!");
     //todo: send list and buffered messages
     //todo string 开始以 list 行数， buffered messages 条数。 以 | 分割， getline 可以识别
 
 
 
-  }else if(tokens[0] == "LOGOUT"){
-    assert(tokens.size() == 1);
+  }else if(rqstCmder == "LOGOUT"){
+    cout << "start parsing request and compare it to LOGOUT, nTokens is(should be 2): " << nTokens<< endl;
+    assert(nTokens == 2);
 
-    struct sockaddr_in *m_address;
-    memset(&m_address, '\0', sizeof(m_address));
+    /*// struct sockaddr_in *m_address;
+    struct sockaddr_in *m_address = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in));
+    memset(&m_address, 0, sizeof(m_address));
     int nAddrLen = sizeof(m_address);
     if(getpeername(fdaccept, (struct sockaddr*)&m_address, (socklen_t*)&nAddrLen) != 0)
     {
@@ -304,8 +313,11 @@ int Server::parseRequest(int fdaccept, string requestStr){
     ss << iport;
     string clntPort = ss.str();
 
+    cout << "[LOGOUT] Got the client socket Port: "<<clntPort << endl;
+    */
 
     //set list of current client to LOGOUT
+    string clntIP = tokens.at(1);
     for (size_t i = 0; i < loggedInList.size(); i++) {
       if (loggedInList.at(i).ip_addr == clntIP) {
         loggedInList.at(i).status = "logged-out";
@@ -316,6 +328,7 @@ int Server::parseRequest(int fdaccept, string requestStr){
   }else{
     cout << "[Server::parseRequest] : Request is not LOGIN or LOGOUT" << endl;
   }
+  return 1;
 
 }
 
@@ -336,7 +349,9 @@ int Server::printLoggedInList(){
 string Server::getMyHostName(){
 	char *msg = (char*)malloc(MSG_SIZE);
 	gethostname(msg, MSG_SIZE);
-	return string(msg);
+  string ret = string(msg);
+  free(msg);
+	return ret;
 }
 int Server::sendMsgtoSocket(int _socket, string msg){
 	std::cout << "SENDing it to the remote server...";
@@ -352,9 +367,8 @@ string Server::recvMsgfromSocket(int _socket){
 	string ret = "";
 	if (recv(_socket, buffer, BUFFER_SIZE, 0) >= 0) {
     ret = string(buffer);
-    free(buffer);
-		return ret;
 	}
+  free(buffer);
   return ret;
 }
 

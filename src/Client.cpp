@@ -15,6 +15,7 @@
 #include <sstream>
 #include <assert.h>
 #include <ifaddrs.h>
+#include <unistd.h>
 
 
 
@@ -29,7 +30,7 @@ int Client::start(){
 
 	//serverSocket = connect_to_host(server_ip, atoi(server_port.c_str()));
 
-  string msg;
+  string msgIn;
 	while (TRUE) {
 		std::cout << "[Client@Xue589]$" << std::endl;
 		// char *msg = (char*) malloc(sizeof(char) * MSG_SIZE);
@@ -43,11 +44,14 @@ int Client::start(){
 		// 	std::cout << "Done" << std::endl;
 		// }
 
-		getline(cin, msg);
+		cout << "Please input commander: $";
+		getline(cin, msgIn);
 
-    cout << "Start parseCmd ..."<<endl;
-		parseCmd(msg);
-    cout << "Sucessfully finish parseCmd ..."<<endl;
+		//cout << "Got commander : " <<msgIn<<endl;
+    // cout << "Start parseCmd ..."<<endl;
+		// sleep(5);
+		parseCmd(msgIn);
+    // cout << "Sucessfully finish parseCmd ..."<<endl;
 
 		// sendMsgtoSocket(serverSocket, msg);
 		// string recvedMsg = recvMsgfromSocket(serverSocket);
@@ -77,7 +81,9 @@ int Client::connect_to_host(string server_ip, int server_port){
 string Client::getMyHostName(){
 	char *msg = (char*)malloc(MSG_SIZE);
 	gethostname(msg, MSG_SIZE);
-	return string(msg);
+	string ret = string(msg);
+	free(msg);
+	return ret;
 }
 int Client::sendMsgtoSocket(int _socket, string msg){
 	std::cout << "SENDing it to the remote server...";
@@ -93,9 +99,8 @@ string Client::recvMsgfromSocket(int _socket){
 	string ret = "";
 	if (recv(_socket, buffer, BUFFER_SIZE, 0) >= 0) {
     ret = string(buffer);
-    free(buffer);
-		return ret;
 	}
+	free(buffer);
   return ret;
 }
 int Client::parseCmd(string cmd){
@@ -118,7 +123,6 @@ int Client::parseCmd(string cmd){
 	if (tokens.size() == 0) {
 		exit(-1);
 	}
-
 
 
 	//Process cmds
@@ -169,16 +173,15 @@ int Client::parseCmd(string cmd){
 	else if (cmder == "SEND") {assert(nToken == 3); onSEND(tokens.at(1), tokens.at(2));}
 	else if (cmder == "BLOCK") {assert(nToken == 2); onBLOCK(tokens.at(1));}
 	else if (cmder == "UNBLOCK") {assert(nToken == 2); onUNBLOCK(tokens.at(1));}
-	else if (cmder == "LOGOUT") {assert(nToken == 1); onLOGOUT();}
+	else if (cmder == "LOGOUT") {
+		cout << "Compare if cmder is LOGOUT..."<<endl;
+		assert(nToken == 1);
+		onLOGOUT();
+		cout << "Finish LOGOUT execution..."<<endl;
+	}
 	else if (cmder == "EXIT") {assert(nToken == 1); onEXIT();}
 	else{std::cerr << "XueError: "<< cmder <<" | NO such commander!" << std::endl;}
   return 1;
-}
-
-string getMyHostName(){
-	char *msg = (char*)malloc(MSG_SIZE);
-	gethostname(msg, MSG_SIZE);
-	return string(msg);
 }
 
 string Client::onAUTHOR(){
@@ -229,8 +232,8 @@ string Client::onLOGIN(string _serverIP, string _serverPort){
 
   sendMsgtoSocket(serverSocket, request);
 
-  // string t = recvMsgfromSocket(serverSocket);
-  // cout <<"Recv msg is : "<< t <<endl;
+  string t = recvMsgfromSocket(serverSocket);
+	cout <<"Recv msg is : "<< t <<endl;
   cout << "Done the request Sending! (if double free or corruption appears again?)"<<endl;
 	return "loggedin"; //can be ignored
 }
@@ -239,12 +242,18 @@ string Client::onSEND(string _clientIP, string _msg){}
 string Client::onBLOCK(string _clientIP){}
 string Client::onUNBLOCK(string _clientIP){}
 string Client::onLOGOUT(){
+	cout << "I'm in onLOGOUT, and processing with serverSocket: "<<serverSocket << endl;
   assert(serverSocket >= 0);
 
   string request = string("LOGOUT");
+	request = request + " " + selfIP;
 
   sendMsgtoSocket(serverSocket, request);
-  string t = recvMsgfromSocket(serverSocket);
-  cout <<"Recv msg is : "<< t <<endl;
+
+	string t = recvMsgfromSocket(serverSocket);
+	cout <<"Recv msg is : "<< t <<endl;
+
+
+	return "logout";  //segmentation fault solved. add this return statement.
 }
 string Client::onEXIT(){}
