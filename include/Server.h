@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include "../include/LoggedInListItemServer.h"
+#include "../include/LoggedInListItemClient.h"
 
 using namespace std;
 
@@ -26,16 +27,20 @@ public:
 
 	int start();
 	int parseCmd(string cmd); //Cmd from stdin
-  int parseRequest(int fdaccept, string requestStr);  //request from sockets
+	int parseRequest(int fdaccept, string requestStr);  //request from sockets
 	string getMyHostName();
-  int sendMsgtoSocket(int _socket, string msg);
-  string recvMsgfromSocket(int _socket);
+	int sendMsgtoSocket(int _socket, string msg);
+	string recvMsgfromSocket(int _socket);
+    int sendMsgtoSocketWithLength(int _socket);
 
-  //deal with LoggedInList
-  void testSortVector();
-  int addLoggedInList(LoggedInListItemServer item);
-  int rmLoggedInList(string ip);
-  int printLoggedInList();
+
+    //deal with LoggedInList
+	void testSortVector();
+	int addLoggedInList(LoggedInListItemServer item);
+	int rmLoggedInList(string ip);
+	int printLoggedInList();
+	vector<LoggedInListItemClient> getListForClient();
+
 
 	//both
 	string onAUTHOR();

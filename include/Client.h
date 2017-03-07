@@ -38,6 +38,8 @@ public:
 	int parseCmd(string cmd);
 	int sendMsgtoSocket(int _socket, string msg);
 	string recvMsgfromSocket(int _socket);
+    string recvMsgfromSocketWithLoop(int _socket);
+
 	string getMyHostName();
 
 	string onAUTHOR();
@@ -56,6 +58,8 @@ public:
 	// int onBROADCAST();
 	// int onSENDFILE(string _clientIP, string _filePath);
 
+	void testSortVector();
+    vector<string> splitString(string str);
 
 };
 

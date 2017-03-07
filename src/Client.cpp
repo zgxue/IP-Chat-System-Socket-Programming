@@ -16,11 +16,23 @@
 #include <assert.h>
 #include <ifaddrs.h>
 #include <unistd.h>
-
+#include <iomanip>
 
 
 using namespace std;
 
+void Client::testSortVector(){
+    LoggedInListItemClient itemTemp = LoggedInListItemClient("euston.onlyone.edu", "34.1.1.1", 3456);
+    loggedInList.push_back(itemTemp);
+    for (int i = 0; i < loggedInList.size(); ++i) {
+        cout << setw(2) <<i+1
+             << " : " <<setw(30)<< loggedInList.at(i).hostname
+             << " : " <<setw(15)<< loggedInList.at(i).ip_addr
+             << " : " <<setw(5)<< loggedInList.at(i).port_num
+             <<endl;
+    }
+
+}
 
 int Client::start(){
 	string _portStr = selfPort;
@@ -29,6 +41,12 @@ int Client::start(){
 	//todo: 需要先读取处理 cmd，出了 IP, LIST, etc。connect 前的第一件事应该是 LOGIN
 
 	//serverSocket = connect_to_host(server_ip, atoi(server_port.c_str()));
+
+    cout << "test begin***************************************"<<endl;
+    testSortVector();
+    onLOGIN("128.205.36.46", "30000");
+    cout << "test end*****************************************"<<endl;
+
 
   string msgIn;
 	while (TRUE) {
@@ -50,6 +68,8 @@ int Client::start(){
 		//cout << "Got commander : " <<msgIn<<endl;
     // cout << "Start parseCmd ..."<<endl;
 		// sleep(5);
+
+        onLOGIN("128.205.36.46", "30000");
 		parseCmd(msgIn);
     // cout << "Sucessfully finish parseCmd ..."<<endl;
 
@@ -103,6 +123,32 @@ string Client::recvMsgfromSocket(int _socket){
 	free(buffer);
   return ret;
 }
+
+string Client::recvMsgfromSocketWithLoop(int _socket){
+    //initialize buffer to receive response
+    char *buffer = (char*) malloc(sizeof(char) * BUFFER_SIZE);
+    memset(buffer, '\0', BUFFER_SIZE);
+    string ret = "";
+    int nCount;
+    while( (nCount = recv(_socket, buffer, BUFFER_SIZE, 0)) > 0 ){
+        ret = ret + string(buffer);
+    }
+    free(buffer);
+    return ret;
+}
+
+
+
+vector<string> Client::splitString(string str){
+    stringstream ss(str);
+    vector<string> tokens;
+    string tkn;
+    while (ss >> tkn) {
+        tokens.push_back(tkn);
+    }
+    return tokens;
+}
+
 int Client::parseCmd(string cmd){
 	/**stringstream ss(cmd);
 	string token[ARGN_MAX];
@@ -164,16 +210,20 @@ int Client::parseCmd(string cmd){
 
 	else if (cmder == "LIST") {assert(nToken == 1); onLIST();}
 	else if (cmder == "LOGIN") {
-    cout << "Compare if cmder is LOGIN..."<<endl;
-    assert(nToken == 3);
-    onLOGIN(tokens.at(1), tokens.at(2));
-    cout << "Finish onLOGIN execution..."<<endl;
-  }
-	else if (cmder == "REFRESH") {assert(nToken == 1); onREFRESH();}
-	else if (cmder == "SEND") {assert(nToken == 3); onSEND(tokens.at(1), tokens.at(2));}
-	else if (cmder == "BLOCK") {assert(nToken == 2); onBLOCK(tokens.at(1));}
-	else if (cmder == "UNBLOCK") {assert(nToken == 2); onUNBLOCK(tokens.at(1));}
-	else if (cmder == "LOGOUT") {
+        cout << "Compare if cmder is LOGIN..."<<endl;
+        assert(nToken == 3);
+        onLOGIN(tokens.at(1), tokens.at(2));
+        cout << "Finish onLOGIN execution..."<<endl;
+    }
+    else if (cmder == "REFRESH") {
+        assert(nToken == 1);
+        onREFRESH();
+        cout << "Finish onREFRESH execution..."<<endl;
+    }
+    else if (cmder == "SEND") {assert(nToken == 3); onSEND(tokens.at(1), tokens.at(2));}
+    else if (cmder == "BLOCK") {assert(nToken == 2); onBLOCK(tokens.at(1));}
+    else if (cmder == "UNBLOCK") {assert(nToken == 2); onUNBLOCK(tokens.at(1));}
+    else if (cmder == "LOGOUT") {
 		cout << "Compare if cmder is LOGOUT..."<<endl;
 		assert(nToken == 1);
 		onLOGOUT();
@@ -216,43 +266,120 @@ string Client::onPORT(){
 	return selfPort;
 }
 
-string Client::onLIST(){}
+string Client::onLIST(){
+    vector<LoggedInListItemClient> resultList = loggedInList;
+
+    printf("[LIST:SUCCESS]\n");
+    for (int j = 0; j < resultList.size(); ++j) {
+        LoggedInListItemClient t = resultList.at(j);
+        cout << setw(2) <<j+1
+             << " : " <<setw(30)<< t.hostname
+             << " : " <<setw(15)<< t.ip_addr
+             << " : " <<setw(5)<< t.port_num
+             <<endl;
+    }
+    printf("[LIST:END]\n");
+    return "list";
+}
+
 string Client::onLOGIN(string _serverIP, string _serverPort){
-  //identify themselves to the server
-  //get the list of other-logged in clients
-  //get bufferd messages
-  /**
-  * 1, 发送自己的信息给 server处理，2， 接收 server 发来的信息并处理。
-  */
-  serverSocket = connect_to_host(_serverIP, atoi(_serverPort.c_str()));
-  server_ip = _serverIP;
-  server_port = _serverPort;
+    //identify themselves to the server
+    //get the list of other-logged in clients
+    //get bufferd messages
+    /**
+    * 1, 发送自己的信息给 server处理，2， 接收 server 发来的信息并处理。
+    */
+    serverSocket = connect_to_host(_serverIP, atoi(_serverPort.c_str()));
+    server_ip = _serverIP;
+    server_port = _serverPort;
 
-  string request = string("LOGIN") +" "+ selfHostName +" "+ selfIP +" "+ selfPort;
+    string request = string("LOGIN") +" "+ selfHostName +" "+ selfIP +" "+ selfPort;
 
-  sendMsgtoSocket(serverSocket, request);
+    sendMsgtoSocket(serverSocket, request);
 
-  string t = recvMsgfromSocket(serverSocket);
-	cout <<"Recv msg is : "<< t <<endl;
-  cout << "Done the request Sending! (if double free or corruption appears again?)"<<endl;
+    string t = recvMsgfromSocket(serverSocket);
+    cout <<"Recv msg is : "<< t <<endl;
+
+
+    //接收返回的list
+    t = recvMsgfromSocket(serverSocket);
+    vector<string> tokens = splitString(t);
+    vector<LoggedInListItemClient> vlist;
+
+    assert(tokens.size()%3 == 0);
+
+    for (int j = 0; j < tokens.size(); j=j+3) {
+        LoggedInListItemClient temp_item = LoggedInListItemClient(tokens.at(j+0),tokens.at(j+1),atoi(tokens.at(j+2).c_str()));
+        vlist.push_back(temp_item);
+    }
+    loggedInList = vlist;
+    sendMsgtoSocket(serverSocket, "ACK");
+
+
+    //接收返回的buffered messages
+    string tmp_msg;
+    while ((tmp_msg = recvMsgfromSocket(serverSocket)) != "END"){
+        cout << "I got buffered message: " << tmp_msg << endl;
+        sendMsgtoSocket(serverSocket, "ACK");
+    }
+
+    cout << "Finish Loggin Step, you can check \"LIST\"." <<endl;
 	return "loggedin"; //can be ignored
 }
-string Client::onREFRESH(){}
-string Client::onSEND(string _clientIP, string _msg){}
+
+string Client::onREFRESH(){
+    string request = string("REFRESH");
+    sendMsgtoSocket(serverSocket, request);
+
+    string t = recvMsgfromSocket(serverSocket);
+    cout <<"Recv msg is : "<< t <<endl;
+
+    t = recvMsgfromSocket(serverSocket);
+    vector<string> tokens = splitString(t);
+    vector<LoggedInListItemClient> vlist;
+
+    assert(tokens.size()%3 == 0);
+
+    for (int j = 0; j < tokens.size(); j=j+3) {
+        LoggedInListItemClient temp_item = LoggedInListItemClient(tokens.at(j+0),tokens.at(j+1),atoi(tokens.at(j+2).c_str()));
+        vlist.push_back(temp_item);
+    }
+    loggedInList = vlist;
+
+    cout << "Finish Refresh Step, you can check \"LIST\"." << endl;
+    return "refresh";
+}
+
+string Client::onSEND(string _clientIP, string _msg){
+    string request = string("SEND");
+
+    //request = request + " " + _clientIP + " " + _msg;
+    request = "SEND 128.205.36.35 sendmessagetest test test2!";
+
+    sendMsgtoSocket(serverSocket, request);
+
+    //this is for "echo"
+    string t = recvMsgfromSocket(serverSocket);
+    cout <<"Recv msg is : "<< t <<endl;
+
+    return "send";
+
+}
+
 string Client::onBLOCK(string _clientIP){}
+
 string Client::onUNBLOCK(string _clientIP){}
+
 string Client::onLOGOUT(){
 	cout << "I'm in onLOGOUT, and processing with serverSocket: "<<serverSocket << endl;
-  assert(serverSocket >= 0);
+    assert(serverSocket >= 0);
+    string request = string("LOGOUT");
+    request = request + " " + selfIP;
 
-  string request = string("LOGOUT");
-	request = request + " " + selfIP;
-
-  sendMsgtoSocket(serverSocket, request);
+    sendMsgtoSocket(serverSocket, request);
 
 	string t = recvMsgfromSocket(serverSocket);
 	cout <<"Recv msg is : "<< t <<endl;
-
 
 	return "logout";  //segmentation fault solved. add this return statement.
 }

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <cstdlib>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/select.h>
@@ -196,9 +197,9 @@ int Server::start(){
 							if (send(fdaccept, buffer, strlen(buffer), 0) == strlen(buffer)) {
 								std::cout << "Done!" << endl;
 							}
-              //process request sent by existing sockets
-              string requestStr = string(buffer);
-              parseRequest(fdaccept, requestStr);
+                            //process request sent by existing sockets
+                            string requestStr = string(buffer);
+                            parseRequest(fdaccept, requestStr);
 
 						}
 						free(buffer);
@@ -276,59 +277,145 @@ int Server::parseRequest(int fdaccept, string requestStr){
 
   string rqstCmder = tokens.at(0); //the command of total request string, the first word
   int nTokens = tokens.size();
-  //Process requestStr
-  if (rqstCmder == "LOGIN") {
-    cout << "[Server::parseRequest] : Request is LOGIN, Processing..." << endl;
-    //add to list
-    assert(nTokens == 4);
 
-    LoggedInListItemServer item = LoggedInListItemServer(tokens.at(1), tokens.at(2), atoi(tokens.at(3).c_str()));
-    //需要查询一下是否已经有对应的项，re-login会出现的情况
-    item.status = "logged-in";
-    addLoggedInList(item);
-    printLoggedInList();
+    //Process requestStr
+    //***********************************************************************************
+    if (rqstCmder == "LOGIN") {
+        cout << "[Server::parseRequest] : Request is LOGIN, Processing..." << endl;
+        //add to list
+        assert(nTokens == 4);
 
-    sendMsgtoSocket(fdaccept, "Already Logged in!");
-    //todo: send list and buffered messages
-    //todo string 开始以 list 行数， buffered messages 条数。 以 | 分割， getline 可以识别
+        LoggedInListItemServer item = LoggedInListItemServer(tokens.at(1), tokens.at(2), atoi(tokens.at(3).c_str()));
+        //需要查询一下是否已经有对应的项，re-login会出现的情况
+        item.status = "logged-in";
+        item.socketNumber = fdaccept;
+
+        addLoggedInList(item);
+        printLoggedInList();
+
+        //sendMsgtoSocket(fdaccept, "Already Logged in!");
+        //todo: send list and buffered messages
+        //todo string 开始以 list 行数， buffered messages 条数。 以 | 分割， getline 可以识别
+
+        vector<LoggedInListItemClient> tlist = getListForClient();
+        // prepare to send : convert to string within length limit of 512 bytes
+        //返回的 list 采用 RELIST 头， 让 client 知道是 list，后面有 buffer 的 messages
+        //alternative: 首先发送一个关于将要发送的条数，让 client 知道后面是多少
+        //alternative: 首先发送关于自己的 list 的字符串的长度以及 各个 messages 的长度，让 client 自己截取子串，
+
+        string strsend;
+        for (int i = 0; i < tlist.size(); ++i) {
+            stringstream ss;
+            ss << tlist.at(i).port_num;
+            string strport_num = ss.str();
+
+            strsend = strsend
+                      + " " + tlist.at(i).hostname
+                      + " " + tlist.at(i).ip_addr
+                      + " " + strport_num;
+        }
+        sendMsgtoSocket(fdaccept,strsend);
+        cout << "just sent : "<<strsend<<endl;
+
+        cout << "just receive: " << recvMsgfromSocket(fdaccept) <<endl; // == "ACK");
+
+
+        string strRcv;
+        for (int j = 0; j < 2; ++j) {
+            string t = "This is the message that I send to test if being recognized well!";
+            sendMsgtoSocket(fdaccept,t);
+            cout << "just sent : "<<strsend<<endl;
+
+            cout << "just receive: " << recvMsgfromSocket(fdaccept) <<endl; // == "ACK");
+        }
+        sendMsgtoSocket(fdaccept,"END");
 
 
 
-  }else if(rqstCmder == "LOGOUT"){
-    cout << "start parsing request and compare it to LOGOUT, nTokens is(should be 2): " << nTokens<< endl;
-    assert(nTokens == 2);
 
-    /*// struct sockaddr_in *m_address;
-    struct sockaddr_in *m_address = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in));
-    memset(&m_address, 0, sizeof(m_address));
-    int nAddrLen = sizeof(m_address);
-    if(getpeername(fdaccept, (struct sockaddr*)&m_address, (socklen_t*)&nAddrLen) != 0)
-    {
-      printf("Get IP address by socket failed!n");
-      return -1;
+
+
+
+
+
+      //***********************************************************************************
+    }else if(rqstCmder == "LOGOUT"){
+        cout << "start parsing request and compare it to LOGOUT, nTokens is(should be 2): " << nTokens<< endl;
+        assert(nTokens == 2);
+
+        //set list of current client to LOGOUT
+        string clntIP = tokens.at(1);
+        for (size_t i = 0; i < loggedInList.size(); i++) {
+        if (loggedInList.at(i).ip_addr == clntIP) {
+            loggedInList.at(i).status = "logged-out";
+            loggedInList.at(i).socketNumber = -1;
+        }
+        }
+        printLoggedInList();
+
+        //***********************************************************************************
+    }else if(rqstCmder == "REFRESH"){
+        assert(nTokens == 1);
+        cout << "[Server::parseRequest] : Request is REFRESH, Processing..." << endl;
+        vector<LoggedInListItemClient> tlist = getListForClient();
+        string strsend;
+
+        for (int i = 0; i < tlist.size(); ++i) {
+            stringstream ss;
+            ss << tlist.at(i).port_num;
+            string strport_num = ss.str();
+
+            strsend = strsend
+                      + " " + tlist.at(i).hostname
+                      + " " + tlist.at(i).ip_addr
+                      + " " + strport_num;
+        }
+        sendMsgtoSocket(fdaccept,strsend);
+
+
+        //***********************************************************************************
+    }else if(rqstCmder == "SEND"){
+        assert(nTokens >= 3);
+        cout << "[Server::parseRequest] : Request is SEND, Processing..." << endl;
+        string toClientIP = tokens.at(1);
+        string fromClientIP;
+
+        string strMsg = tokens.at(2);
+        for (int i = 3; i < nTokens; ++i) {
+            strMsg = strMsg + " " + tokens.at(i);
+        }
+
+
+        //getpeerip
+        struct sockaddr_in c;
+        socklen_t cLen = sizeof(c);
+        getpeername(fdaccept, (struct sockaddr*) &c, &cLen);
+        printf("[Send] fromClient: %s\n", inet_ntoa(c.sin_addr));
+        fromClientIP =  inet_ntoa(c.sin_addr);
+
+        //find socketNumber from list
+        int listSize = loggedInList.size();
+        int toClientSocket = -100;
+        for (int i = 0; i < listSize; i++) {
+            if (loggedInList.at(i).ip_addr == toClientIP) {
+                    toClientSocket = loggedInList.at(i).socketNumber;
+            }
+        }
+
+        //根据 socket 来决定 action
+        if(toClientSocket > 0){
+            cout << "Here should send strMsg to toClientIP" << endl;
+            //sendMsgtoSocket(toClientSocket, strMsg);
+        }
+        if(toClientSocket == -1){
+            cout << "Here should buffer this strMsg for toClientIP, and store it in the loggedInList" <<endl;
+        }
+
     }
-    string clntIP = string(inet_ntoa(m_address->sin_addr));
-    int iport = ntohs(m_address->sin_port);
-    stringstream ss;
-    ss << iport;
-    string clntPort = ss.str();
-
-    cout << "[LOGOUT] Got the client socket Port: "<<clntPort << endl;
-    */
-
-    //set list of current client to LOGOUT
-    string clntIP = tokens.at(1);
-    for (size_t i = 0; i < loggedInList.size(); i++) {
-      if (loggedInList.at(i).ip_addr == clntIP) {
-        loggedInList.at(i).status = "logged-out";
-      }
+    else{
+        cout << "[Server::parseRequest] : Request is not LOGIN or LOGOUT or REFRESH" << endl;
     }
-    printLoggedInList();
-
-  }else{
-    cout << "[Server::parseRequest] : Request is not LOGIN or LOGOUT" << endl;
-  }
-  return 1;
+    return 1;
 
 }
 
@@ -346,6 +433,22 @@ int Server::printLoggedInList(){
   }
 }
 
+vector<LoggedInListItemClient> Server::getListForClient(){
+    vector<LoggedInListItemClient> resultList;
+
+    for (size_t i = 0; i < loggedInList.size(); i++) {
+        if(loggedInList.at(i).status != "logged-in"){
+            continue;
+        }
+
+        LoggedInListItemServer ts = loggedInList.at(i);
+        LoggedInListItemClient tc = LoggedInListItemClient(ts.hostname, ts.ip_addr, ts.port_num);
+        resultList.push_back(tc);
+    }
+    return resultList;
+}
+
+
 string Server::getMyHostName(){
 	char *msg = (char*)malloc(MSG_SIZE);
 	gethostname(msg, MSG_SIZE);
@@ -353,6 +456,8 @@ string Server::getMyHostName(){
   free(msg);
 	return ret;
 }
+
+
 int Server::sendMsgtoSocket(int _socket, string msg){
 	std::cout << "SENDing it to the remote server...";
 	if (send(_socket, msg.c_str(), msg.length(), 0) == msg.length()) {
@@ -397,13 +502,44 @@ string Server::onIP(){
 		}
 	}
 
-		freeifaddrs(ifaddr);
-		return string(ip_addr);
+    freeifaddrs(ifaddr);
+    return string(ip_addr);
 }
 string Server::onPORT(){
 	return selfPort;
 }
 
-string Server::onLIST(){}
-string Server::onSTATISTICS(){}
+string Server::onLIST(){
+
+    vector<LoggedInListItemClient> resultList = getListForClient();
+
+    printf("[LIST:SUCCESS]\n");
+    for (int j = 0; j < resultList.size(); ++j) {
+        LoggedInListItemClient t = resultList.at(j);
+        cout << setw(2) <<j+1
+             << " : " <<setw(30)<< t.hostname
+             << " : " <<setw(15)<< t.ip_addr
+             << " : " <<setw(5)<< t.port_num
+             <<endl;
+    }
+    printf("[LIST:END]\n");
+    return "list";
+}
+string Server::onSTATISTICS(){
+    vector<LoggedInListItemServer> resultList = loggedInList;
+
+    printf("[LIST:SUCCESS]\n");
+    for (int j = 0; j < resultList.size(); ++j) {
+        LoggedInListItemServer t = resultList.at(j);
+        cout << setw(2) <<j+1
+             << " : " <<setw(30)<< t.hostname
+             << " : " <<setw(5)<< t.num_msg_sent
+             << " : " <<setw(5)<< t.num_msg_rcv
+             << " : " <<setw(10)<< t.status
+             <<endl;
+    }
+    printf("[LIST:END]\n");
+    return "statistics";
+
+}
 string Server::onBLOCKED(string _clientIP){}
