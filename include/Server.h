@@ -26,7 +26,8 @@ public:
 		{}
 
 	int start();
-	int parseCmd(string cmd); //Cmd from stdin
+    int connect_to_host(string server_ip, int server_port);//返回成功连接的remoteServer 的 fdsocket
+    int parseCmd(string cmd); //Cmd from stdin
 	int parseRequest(int fdaccept, string requestStr);  //request from sockets
 	string getMyHostName();
 	int sendMsgtoSocket(int _socket, string msg);

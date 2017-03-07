@@ -211,6 +211,24 @@ int Server::start(){
 	return 1;
 }
 
+int Server::connect_to_host(string server_ip, int server_port){
+    int fdsocket;
+    struct sockaddr_in remoteServerAddr;
+    fdsocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (fdsocket < 0) {
+        std::cerr << "XueError: Failed to create socket.[Client::connect_to_host]" << std::endl;
+    }
+    bzero(&remoteServerAddr, sizeof(remoteServerAddr));
+    remoteServerAddr.sin_family = AF_INET;
+    inet_pton(AF_INET, server_ip.c_str(), &remoteServerAddr.sin_addr);
+    remoteServerAddr.sin_port = htons(server_port);
+
+    if (connect(fdsocket, (struct sockaddr *)&remoteServerAddr, (socklen_t)sizeof(remoteServerAddr))<0) {
+        std::cerr << "XueError: Conect failed.[Client::connect_to_host]" << std::endl;
+    }
+    return fdsocket;
+}
+
 int Server::parseCmd(string cmd){
   stringstream ss(cmd);
   vector<string> tokens;
@@ -324,7 +342,7 @@ int Server::parseRequest(int fdaccept, string requestStr){
         for (int j = 0; j < 2; ++j) {
             string t = "This is the message that I send to test if being recognized well!";
             sendMsgtoSocket(fdaccept,t);
-            cout << "just sent : "<<strsend<<endl;
+            cout << "just sent : "<< t <<endl;
 
             cout << "just receive: " << recvMsgfromSocket(fdaccept) <<endl; // == "ACK");
         }
@@ -378,42 +396,68 @@ int Server::parseRequest(int fdaccept, string requestStr){
         assert(nTokens >= 3);
         cout << "[Server::parseRequest] : Request is SEND, Processing..." << endl;
         string toClientIP = tokens.at(1);
+        int toClientPort = 0;
         string fromClientIP;
+
+        int listSize = loggedInList.size();
+        int toClientSocket = -100;
+        int indexOftoClientInList = -1;
+        int indexOffromClientInList = -1;
 
         string strMsg = tokens.at(2);
         for (int i = 3; i < nTokens; ++i) {
             strMsg = strMsg + " " + tokens.at(i);
         }
 
-
-        //getpeerip
+        //getpeerip, get fromClientIP
         struct sockaddr_in c;
         socklen_t cLen = sizeof(c);
         getpeername(fdaccept, (struct sockaddr*) &c, &cLen);
         printf("[Send] fromClient: %s\n", inet_ntoa(c.sin_addr));
         fromClientIP =  inet_ntoa(c.sin_addr);
 
+        //modify the fromClient's msg_send
+        for (int i = 0; i < listSize; i++) {
+            if (loggedInList.at(i).ip_addr == fromClientIP) {
+                indexOffromClientInList = i;
+            }
+        }
+        assert(indexOffromClientInList != -1);
+        loggedInList.at(indexOffromClientInList).num_msg_sent += 1;
+
+
         //find socketNumber from list
-        int listSize = loggedInList.size();
-        int toClientSocket = -100;
         for (int i = 0; i < listSize; i++) {
             if (loggedInList.at(i).ip_addr == toClientIP) {
-                    toClientSocket = loggedInList.at(i).socketNumber;
+                toClientSocket = loggedInList.at(i).socketNumber;
+                toClientPort = loggedInList.at(i).port_num;
+                indexOftoClientInList = i;
             }
         }
 
         //根据 socket 来决定 action
         if(toClientSocket > 0){
-            cout << "Here should send strMsg to toClientIP" << endl;
+            //cout << "Here should send strMsg to toClientIP" << endl;
             //sendMsgtoSocket(toClientSocket, strMsg);
+            assert(toClientPort != 0);
+            int newSocketToClient = connect_to_host(toClientIP, toClientPort);
+            sendMsgtoSocket(newSocketToClient, strMsg);
+            loggedInList.at(indexOftoClientInList).num_msg_rcv += 1;
+            close(newSocketToClient);
+
         }
         if(toClientSocket == -1){
             cout << "Here should buffer this strMsg for toClientIP, and store it in the loggedInList" <<endl;
+            assert(indexOftoClientInList != -1);
+            pair<string, string> tbuf = make_pair(fromClientIP, strMsg);
+            loggedInList.at(indexOftoClientInList).bufferdMessages.push_back(tbuf);
         }
+
+        printLoggedInList();
 
     }
     else{
-        cout << "[Server::parseRequest] : Request is not LOGIN or LOGOUT or REFRESH" << endl;
+        cout << "[Server::parseRequest] : Request is not LOGIN or LOGOUT or REFRESH or SEND" << endl;
     }
     return 1;
 
@@ -429,6 +473,7 @@ int Server::printLoggedInList(){
         << " : " <<setw(3)<< t.num_msg_sent
         << " : " <<setw(3)<< t.num_msg_rcv
         << " : " <<setw(3)<< t.status
+        << " : " <<setw(5)<< t.socketNumber
         <<endl;
   }
 }

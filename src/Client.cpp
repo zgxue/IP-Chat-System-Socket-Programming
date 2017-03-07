@@ -35,51 +35,171 @@ void Client::testSortVector(){
 }
 
 int Client::start(){
-	string _portStr = selfPort;
-	cout << "This is Client process with port : " << _portStr << endl;
-	//现在一个机器的上运行，127.0.0.1， 两个程序，分配不同监听端口
-	//todo: 需要先读取处理 cmd，出了 IP, LIST, etc。connect 前的第一件事应该是 LOGIN
-
-	//serverSocket = connect_to_host(server_ip, atoi(server_port.c_str()));
-
+    string _portStr = selfPort;
+    cout << "This is Client process with port : " << _portStr << endl;
     cout << "test begin***************************************"<<endl;
     testSortVector();
     onLOGIN("128.205.36.46", "30000");
     cout << "test end*****************************************"<<endl;
 
 
-  string msgIn;
-	while (TRUE) {
-		std::cout << "[Client@Xue589]$" << std::endl;
-		// char *msg = (char*) malloc(sizeof(char) * MSG_SIZE);
-		// memset(msg, '\0', MSG_SIZE);
-		// if (fgets(msg, MSG_SIZE-1, stdin) == NULL) {
-		// 	exit(-1);
-		// }
-		// printf("I got: %s(size:%d chars)\n", msg, strlen(msg));
-		// std::cout << "SENDing it to the remote server..." << '\n';
-		// if (send(server, msg, strlen(msg), 0) == strlen(msg)) {
-		// 	std::cout << "Done" << std::endl;
-		// }
 
-		cout << "Please input commander: $";
-		getline(cin, msgIn);
+    string msgIn;
+    while (TRUE) {
+        std::cout << "[Client@Xue589]$" << std::endl;
+        // char *msg = (char*) malloc(sizeof(char) * MSG_SIZE);
+        // memset(msg, '\0', MSG_SIZE);
+        // if (fgets(msg, MSG_SIZE-1, stdin) == NULL) {
+        // 	exit(-1);
+        // }
+        // printf("I got: %s(size:%d chars)\n", msg, strlen(msg));
+        // std::cout << "SENDing it to the remote server..." << '\n';
+        // if (send(server, msg, strlen(msg), 0) == strlen(msg)) {
+        // 	std::cout << "Done" << std::endl;
+        // }
 
-		//cout << "Got commander : " <<msgIn<<endl;
-    // cout << "Start parseCmd ..."<<endl;
-		// sleep(5);
+        cout << "Please input commander: $";
+        getline(cin, msgIn);
 
-        onLOGIN("128.205.36.46", "30000");
-		parseCmd(msgIn);
-    // cout << "Sucessfully finish parseCmd ..."<<endl;
+        //onLOGIN("128.205.36.46", "30000");
+        parseCmd(msgIn);
 
-		// sendMsgtoSocket(serverSocket, msg);
-		// string recvedMsg = recvMsgfromSocket(serverSocket);
-		// std::cout << "Recved msg is: " << recvedMsg.c_str() << '\n';
-
-	}
-	return 1;
+    }
+    return 1;
 }
+
+int Client::startNew(){
+    string _portStr = selfPort;
+    cout << "This is Client process with port : " << _portStr << endl;
+    cout << "test begin***************************************"<<endl;
+    testSortVector();
+    onLOGIN("128.205.36.46", "30000");
+    cout << "test end*****************************************"<<endl;
+
+
+    int port,
+            server_socket,
+            head_socket,
+            selret,
+            sock_index,
+            fdaccept = 0,
+            caddr_len;
+    struct sockaddr_in server_addr;
+    struct sockaddr_in client_addr;
+
+    fd_set master_list;
+    fd_set watch_list;
+
+    //socket
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket < 0) {
+        std::cerr << "XueError: Cannot create socket" << '\n';
+    }
+
+    //fill up sockaddr_in struct
+    port = atoi(_portStr.c_str());
+    bzero(&server_addr,sizeof(server_addr));
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(port);
+
+    //bind
+
+    if(bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0){
+        std::cerr << "XueError: Bind failed" << '\n';
+    }
+
+    //listen
+    if (listen(server_socket, BACKLOG) < 0) {
+        std::cerr << "XueError: Unable to listen on port" << '\n';
+    }
+
+    /**************************************************************************/
+    // Zero select FD sets
+    FD_ZERO(&master_list);
+    FD_ZERO(&watch_list);
+
+    //Register the listening socket
+    FD_SET(server_socket, &master_list);
+    //Register STDIN
+    FD_SET(STDIN, &master_list);
+
+    head_socket = server_socket;
+
+    while (TRUE) {
+        memcpy(&watch_list, &master_list, sizeof(master_list));
+
+        //select system call, BLOCK
+        selret = select(head_socket+1, &watch_list, NULL, NULL, NULL);
+        if (selret < 0) {
+            std::cerr << "XueError: Select() failed." << '\n';
+        }
+        if (selret > 0) {
+            //loop socket descriptors to check which one is ready
+            for (sock_index=0; sock_index <= head_socket; sock_index++) {
+                if (FD_ISSET(sock_index, &watch_list)) {
+                    //check if new command on STDIN
+                    if (sock_index == STDIN) {
+                        char *cmd = (char*) malloc(sizeof(char) * CMD_SIZE);
+                        memset(cmd, '\0', CMD_SIZE);
+                        if (fgets(cmd, CMD_SIZE-1, stdin) == NULL) {
+                            exit(-1);
+                        }
+                        std::cout << "I got command:" << cmd << endl;
+
+                        //todo: process PA1 commands here
+                        string tempCmd = string(cmd);
+                        parseCmd(tempCmd);
+
+                        free(cmd);
+                    }
+
+                        //check if new client is requesting connections, 新 client 连接
+                    else if (sock_index == server_socket) {
+                        caddr_len = sizeof(client_addr);
+                        fdaccept = accept(server_socket, (struct sockaddr *)&client_addr, (socklen_t*)&caddr_len);
+                        if (fdaccept < 0) {
+                            std::cerr << "XueError: Accept failed." << '\n';
+                        }
+                        std::cout << "Remote Host Connected." << '\n';
+
+                        //add to watched socket list
+                        FD_SET(fdaccept, &master_list);
+                        if (fdaccept > head_socket) {
+                            head_socket = fdaccept;
+                        }
+                    }
+
+                        //read from exiting Clients
+                    else{
+                        //initialize buffer to receive response
+                        char *buffer = (char*) malloc(sizeof(char) * BUFFER_SIZE);
+                        memset(buffer, '\0', BUFFER_SIZE);
+                        if (recv(sock_index, buffer, BUFFER_SIZE, 0) <= 0) {
+                            close(sock_index);
+                            std::cout << "Remote Host's connection is terminated." << '\n';
+
+                            //remove from watched list
+                            FD_CLR(sock_index, &master_list);
+                        }
+                        else{
+                            //process incomming data from exiting clients
+                            std::cout << "[select]Remote sent me: " << buffer << endl;
+                            string msgStr = string(buffer);
+
+                        }
+                        free(buffer);
+                    }
+                }
+            }
+        }
+    }
+
+
+    return 1;
+}
+
 int Client::connect_to_host(string server_ip, int server_port){
 	int fdsocket;
 	struct sockaddr_in remoteServerAddr;
@@ -220,7 +340,14 @@ int Client::parseCmd(string cmd){
         onREFRESH();
         cout << "Finish onREFRESH execution..."<<endl;
     }
-    else if (cmder == "SEND") {assert(nToken == 3); onSEND(tokens.at(1), tokens.at(2));}
+    else if (cmder == "SEND") {
+        assert(nToken >= 3);
+        string tmsg = tokens.at(2);
+        for (int i = 3; i < nToken; ++i) {
+            tmsg = tmsg + " " + tokens.at(i);
+        }
+        onSEND(tokens.at(1), tmsg);
+    }
     else if (cmder == "BLOCK") {assert(nToken == 2); onBLOCK(tokens.at(1));}
     else if (cmder == "UNBLOCK") {assert(nToken == 2); onUNBLOCK(tokens.at(1));}
     else if (cmder == "LOGOUT") {
@@ -353,8 +480,8 @@ string Client::onREFRESH(){
 string Client::onSEND(string _clientIP, string _msg){
     string request = string("SEND");
 
-    //request = request + " " + _clientIP + " " + _msg;
-    request = "SEND 128.205.36.35 sendmessagetest test test2!";
+    request = request + " " + _clientIP + " " + _msg;
+    //request = "SEND 128.205.36.35 sendmessagetest if you can see this in client machine, SEND does well.";
 
     sendMsgtoSocket(serverSocket, request);
 

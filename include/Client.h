@@ -30,10 +30,11 @@ public:
 		server_ip(""),
 		server_port(""),
 		selfHostName(getMyHostName()),
-    serverSocket(-1)
+        serverSocket(-1)
 		{}
 
 	int start();
+    int startNew();
 	int connect_to_host(string server_ip, int server_port);//返回成功连接的remoteServer 的 fdsocket
 	int parseCmd(string cmd);
 	int sendMsgtoSocket(int _socket, string msg);
