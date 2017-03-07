@@ -493,9 +493,36 @@ string Client::onSEND(string _clientIP, string _msg){
 
 }
 
-string Client::onBLOCK(string _clientIP){}
+string Client::onBLOCK(string _clientIP){
+    cout << "I'm in BLOCK, and processing with serverSocket: "<<serverSocket << endl;
+    assert(serverSocket >= 0);
+    string request = string("BLOCK");
+    request = request + " " + _clientIP;
 
-string Client::onUNBLOCK(string _clientIP){}
+    sendMsgtoSocket(serverSocket, request);
+
+    string t = recvMsgfromSocket(serverSocket);
+    cout <<"Recv msg is : "<< t <<endl;
+
+
+    return "block";
+}
+
+string Client::onUNBLOCK(string _clientIP){
+    cout << "I'm in UNBLOCK, and processing with serverSocket: "<<serverSocket << endl;
+    assert(serverSocket >= 0);
+    string request = string("UNBLOCK");
+    request = request + " " + _clientIP;
+
+    sendMsgtoSocket(serverSocket, request);
+
+    string t = recvMsgfromSocket(serverSocket);
+    cout <<"Recv msg is : "<< t <<endl;
+
+
+    return "unblock";
+
+}
 
 string Client::onLOGOUT(){
 	cout << "I'm in onLOGOUT, and processing with serverSocket: "<<serverSocket << endl;

@@ -74,6 +74,78 @@ int Server::rmLoggedInList(string ip){
   }
   return 0;
 }
+int Server::addBlockList(string blockingIP, string blockedIP){
+    size_t i = 0;
+    for (i = 0; i < loggedInList.size(); i++) {
+        LoggedInListItemServer lilis = loggedInList.at(i);
+        if (lilis.ip_addr == blockingIP) {
+            vector<string> blist = lilis.blockedList;
+            int j = 0;
+            for (j = 0; j < blist.size(); ++j) {
+                if(blist.at(j) == blockedIP){
+                    break;
+                }
+            }
+            if (j == blist.size()){ //没有再次 block，添加新的
+                loggedInList.at(i).blockedList.push_back(blockedIP);
+            }
+            break;
+        }
+    }
+    if (i == loggedInList.size()){
+        return -1; //means that blockingIP is not existed in loggedInList
+    }
+    return 1;
+}
+int Server::rmBlockList(string unblockingIP, string unblockedIP){
+    size_t i = 0;
+    for (i = 0; i < loggedInList.size(); i++) {
+        LoggedInListItemServer lilis = loggedInList.at(i);
+        if (lilis.ip_addr == unblockingIP) {
+            vector<string> blist = lilis.blockedList;
+            int j = 0;
+            for (j = 0; j < blist.size(); ++j) {
+                if(blist.at(j) == unblockedIP){
+                    loggedInList.at(i).blockedList.erase(loggedInList.at(i).blockedList.begin() + i);
+                    break;
+                }
+            }
+            break;
+        }
+    }
+    if (i == loggedInList.size()){
+        return -1; //means that blockingIP is not existed in loggedInList
+    }
+    return 1;
+}
+int Server::isClientBeenBlocked(string blockedBy, string beBlocked){
+    // -1 means no such blockedBy IP in the loggedInList
+    // 0 means not be blocked
+    // 1 means be blocked
+    int ret = -100;
+    int i = 0;
+    for (i = 0; i < loggedInList.size(); ++i) {
+        if(loggedInList.at(i).ip_addr == blockedBy){
+            int j = 0;
+            for (j = 0; j < loggedInList.at(i).blockedList.size(); ++j) {
+                if(loggedInList.at(i).blockedList.at(j) == beBlocked){
+                    ret = 1;
+                    break;
+                }
+            }
+            if(j == loggedInList.at(i).blockedList.size()){
+                ret = 0;
+            }
+            break;
+        }
+    }
+    if(i == loggedInList.size()){
+        ret = -1;
+    }
+    return ret;
+}
+
+
 
 int Server::start(){
 	string _portStr = selfPort;
@@ -278,7 +350,10 @@ int Server::parseCmd(string cmd){
 
 	else if (cmder == "LIST") {assert(nToken == 1); onLIST();}
 	else if (cmder == "STATISTICS") {assert(nToken == 1);onSTATISTICS();}
-	else if (cmder == "BLOCKED") {assert(nToken == 2); onBLOCKED(tokens.at(0));}
+	else if (cmder == "BLOCKED") {
+        assert(nToken == 2);
+        onBLOCKED(tokens.at(1));
+    }
 	else{std::cerr << "XueError: "<< cmder <<" | NO such commander!" << std::endl;}
 }
 
@@ -432,18 +507,21 @@ int Server::parseRequest(int fdaccept, string requestStr){
                 toClientSocket = loggedInList.at(i).socketNumber;
                 toClientPort = loggedInList.at(i).port_num;
                 indexOftoClientInList = i;
+                break;
             }
         }
 
         //根据 socket 来决定 action
         if(toClientSocket > 0){
-            //cout << "Here should send strMsg to toClientIP" << endl;
-            //sendMsgtoSocket(toClientSocket, strMsg);
-            assert(toClientPort != 0);
-            int newSocketToClient = connect_to_host(toClientIP, toClientPort);
-            sendMsgtoSocket(newSocketToClient, strMsg);
-            loggedInList.at(indexOftoClientInList).num_msg_rcv += 1;
-            close(newSocketToClient);
+            if (isClientBeenBlocked(fromClientIP, toClientIP) == 0){
+                //cout << "Here should send strMsg to toClientIP" << endl;
+                //sendMsgtoSocket(toClientSocket, strMsg);
+                assert(toClientPort != 0);
+                int newSocketToClient = connect_to_host(toClientIP, toClientPort);
+                sendMsgtoSocket(newSocketToClient, strMsg);
+                loggedInList.at(indexOftoClientInList).num_msg_rcv += 1;
+                close(newSocketToClient);
+            }
 
         }
         if(toClientSocket == -1){
@@ -455,9 +533,44 @@ int Server::parseRequest(int fdaccept, string requestStr){
 
         printLoggedInList();
 
+        //**************************************************************************************************
+    }else if(rqstCmder == "BLOCK"){
+
+        cout << "start parsing request and compare it to BLOCK, nTokens is(should be 2): " << nTokens<< endl;
+        assert(nTokens == 2);
+
+        string blockingIP;
+        string blockedIP;
+
+        //get blocking IP an blockedIP
+        struct sockaddr_in c;
+        socklen_t cLen = sizeof(c);
+        getpeername(fdaccept, (struct sockaddr*) &c, &cLen);
+        printf("[Send] fromClient: %s\n", inet_ntoa(c.sin_addr));
+        blockingIP =  inet_ntoa(c.sin_addr);
+        blockedIP = tokens.at(1);
+        addBlockList(blockingIP, blockedIP);
+
+        //**************************************************************************************************
+    }else if(rqstCmder == "UNBLOCK"){
+        cout << "start parsing request and compare it to UNBLOCK, nTokens is(should be 2): " << nTokens<< endl;
+        assert(nTokens == 2);
+
+        string unblockingIP;
+        string unblockedIP;
+
+        //get blocking IP an blockedIP
+        struct sockaddr_in c;
+        socklen_t cLen = sizeof(c);
+        getpeername(fdaccept, (struct sockaddr*) &c, &cLen);
+        printf("[Send] fromClient: %s\n", inet_ntoa(c.sin_addr));
+        unblockingIP =  inet_ntoa(c.sin_addr);
+        unblockedIP = tokens.at(1);
+        rmBlockList(unblockingIP, unblockedIP);
+
     }
     else{
-        cout << "[Server::parseRequest] : Request is not LOGIN or LOGOUT or REFRESH or SEND" << endl;
+        cout << "[Server::parseRequest] : Request is not LOGIN or LOGOUT or REFRESH or SEND or BLOCK" << endl;
     }
     return 1;
 
@@ -587,4 +700,28 @@ string Server::onSTATISTICS(){
     return "statistics";
 
 }
-string Server::onBLOCKED(string _clientIP){}
+string Server::onBLOCKED(string _clientIP){
+
+    vector<string> blockedlist;
+    int i = 0;
+    for (i = 0; i < loggedInList.size(); ++i) {
+        LoggedInListItemServer lllis = loggedInList.at(i);
+        if(lllis.ip_addr == _clientIP){
+            blockedlist = lllis.blockedList;
+            break;
+        }
+    }
+
+    if(i == loggedInList.size()){
+        cerr << "[blocked] there is no match record given the clientIP." <<endl;
+        return "NoMatch";
+    }
+
+    printf("[BLOCKED:SUCCESS]\n");
+    for (int j = 0; j < blockedlist.size(); ++j) {
+        cout << blockedlist.at(j) << endl;
+    }
+    printf("[BLOCKED:END]\n");
+
+    return "blocked";
+}

@@ -42,6 +42,10 @@ public:
 	int printLoggedInList();
 	vector<LoggedInListItemClient> getListForClient();
 
+    int addBlockList(string blockingIP, string blockedIP);
+    int rmBlockList(string unblockingIP, string unblockedIP);
+    int isClientBeenBlocked(string blockedBy, string beBlocked);
+
 
 	//both
 	string onAUTHOR();
