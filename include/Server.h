@@ -45,6 +45,9 @@ public:
     int addBlockList(string blockingIP, string blockedIP);
     int rmBlockList(string unblockingIP, string unblockedIP);
     int isClientBeenBlocked(string blockedBy, string beBlocked);
+    int isClientLoggedIn(string clientIP);
+    int findIndexOfIpInLIST(string clientIP);
+    string findClientIPfromSocket(int clientSocket);
 
 
 	//both
@@ -55,6 +58,9 @@ public:
 	//shell
 	string onSTATISTICS();
 	string onBLOCKED(string _clientIP);
+
+    string inBROADCAST(int fromClientSocket, string msgBroadcast);
+    string inEXIT(int fromClientSocket);
 
 
 

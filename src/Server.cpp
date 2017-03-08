@@ -129,11 +129,25 @@ int Server::isClientBeenBlocked(string blockedBy, string beBlocked){
             int j = 0;
             for (j = 0; j < loggedInList.at(i).blockedList.size(); ++j) {
                 if(loggedInList.at(i).blockedList.at(j) == beBlocked){
-                    ret = 1;
-                    break;
+                    return 1;
                 }
             }
-            if(j == loggedInList.at(i).blockedList.size()){
+            return 0;
+        }
+    }
+    return -1;
+}
+int Server::isClientLoggedIn(string clientIP){
+    // -1 means clientIP doesn't exist
+    // 0 means logged-out
+    // 1 means logged-in
+    int ret = -100;
+    int i =0;
+    for (i = 0; i < loggedInList.size(); ++i) {
+        if(loggedInList.at(i).ip_addr == clientIP){
+            if(loggedInList.at(i).status == "logged-in"){
+                ret = 1;
+            }else if(loggedInList.at(i).status == "logged-out"){
                 ret = 0;
             }
             break;
@@ -142,8 +156,30 @@ int Server::isClientBeenBlocked(string blockedBy, string beBlocked){
     if(i == loggedInList.size()){
         ret = -1;
     }
+
     return ret;
 }
+int Server::findIndexOfIpInLIST(string clientIP){
+    // -1 means no such IP exists in LIST
+    // >= 0 the index
+    int ret = -1;
+    for (int i = 0; i < loggedInList.size(); ++i) {
+        if(loggedInList.at(i).ip_addr == clientIP){
+            ret = i;
+            break;
+        }
+    }
+    return ret;
+
+}
+string Server::findClientIPfromSocket(int clientSocket){
+    struct sockaddr_in c;
+    socklen_t cLen = sizeof(c);
+    getpeername(clientSocket, (struct sockaddr*) &c, &cLen);
+    string result =  inet_ntoa(c.sin_addr);
+    return result;
+}
+
 
 
 
@@ -265,13 +301,10 @@ int Server::start(){
 						else{
 							//process incomming data from exiting clients
 							std::cout << "Client sent me: " << buffer << endl;
-							std::cout << "Echoing back to remote host ..." << endl;
-							if (send(fdaccept, buffer, strlen(buffer), 0) == strlen(buffer)) {
-								std::cout << "Done!" << endl;
-							}
                             //process request sent by existing sockets
                             string requestStr = string(buffer);
-                            parseRequest(fdaccept, requestStr);
+//                            parseRequest(fdaccept, requestStr);
+                            parseRequest(sock_index, requestStr);
 
 						}
 						free(buffer);
@@ -386,15 +419,8 @@ int Server::parseRequest(int fdaccept, string requestStr){
         addLoggedInList(item);
         printLoggedInList();
 
-        //sendMsgtoSocket(fdaccept, "Already Logged in!");
-        //todo: send list and buffered messages
-        //todo string 开始以 list 行数， buffered messages 条数。 以 | 分割， getline 可以识别
-
         vector<LoggedInListItemClient> tlist = getListForClient();
-        // prepare to send : convert to string within length limit of 512 bytes
-        //返回的 list 采用 RELIST 头， 让 client 知道是 list，后面有 buffer 的 messages
-        //alternative: 首先发送一个关于将要发送的条数，让 client 知道后面是多少
-        //alternative: 首先发送关于自己的 list 的字符串的长度以及 各个 messages 的长度，让 client 自己截取子串，
+
 
         string strsend;
         for (int i = 0; i < tlist.size(); ++i) {
@@ -414,22 +440,28 @@ int Server::parseRequest(int fdaccept, string requestStr){
 
 
         string strRcv;
-        for (int j = 0; j < 2; ++j) {
+
+        int ind = findIndexOfIpInLIST(findClientIPfromSocket(fdaccept));
+        if(ind >= 0){
+            for (int j = 0; j < loggedInList.at(ind).bufferdMessages.size(); ++j) {
+                string t = "from:";
+                t = t + loggedInList.at(ind).bufferdMessages.at(j).first
+                        +" " + loggedInList.at(ind).bufferdMessages.at(j).second;
+                sendMsgtoSocket(fdaccept, t);
+                recvMsgfromSocket(fdaccept);  //wait "ACK"
+
+            }
+            sendMsgtoSocket(fdaccept,"END");
+        }
+
+
+/*        for (int j = 0; j < 2; ++j) {
             string t = "This is the message that I send to test if being recognized well!";
             sendMsgtoSocket(fdaccept,t);
             cout << "just sent : "<< t <<endl;
 
             cout << "just receive: " << recvMsgfromSocket(fdaccept) <<endl; // == "ACK");
-        }
-        sendMsgtoSocket(fdaccept,"END");
-
-
-
-
-
-
-
-
+        }*/
 
       //***********************************************************************************
     }else if(rqstCmder == "LOGOUT"){
@@ -451,7 +483,8 @@ int Server::parseRequest(int fdaccept, string requestStr){
         assert(nTokens == 1);
         cout << "[Server::parseRequest] : Request is REFRESH, Processing..." << endl;
         vector<LoggedInListItemClient> tlist = getListForClient();
-        string strsend;
+        cout << "[rqstCmder == REGRESH] getlistforClient's return size is:"<<tlist.size()<<endl;
+        string strsend="";
 
         for (int i = 0; i < tlist.size(); ++i) {
             stringstream ss;
@@ -464,6 +497,9 @@ int Server::parseRequest(int fdaccept, string requestStr){
                       + " " + strport_num;
         }
         sendMsgtoSocket(fdaccept,strsend);
+        cout << "just sent : "<<strsend<<endl;
+
+        cout << "just receive: " << recvMsgfromSocket(fdaccept) <<endl; // == "ACK");
 
 
         //***********************************************************************************
@@ -513,7 +549,7 @@ int Server::parseRequest(int fdaccept, string requestStr){
 
         //根据 socket 来决定 action
         if(toClientSocket > 0){
-            if (isClientBeenBlocked(fromClientIP, toClientIP) == 0){
+            if (isClientBeenBlocked(toClientIP, fromClientIP) == 0){
                 //cout << "Here should send strMsg to toClientIP" << endl;
                 //sendMsgtoSocket(toClientSocket, strMsg);
                 assert(toClientPort != 0);
@@ -525,6 +561,7 @@ int Server::parseRequest(int fdaccept, string requestStr){
 
         }
         if(toClientSocket == -1){
+
             cout << "Here should buffer this strMsg for toClientIP, and store it in the loggedInList" <<endl;
             assert(indexOftoClientInList != -1);
             pair<string, string> tbuf = make_pair(fromClientIP, strMsg);
@@ -568,9 +605,22 @@ int Server::parseRequest(int fdaccept, string requestStr){
         unblockedIP = tokens.at(1);
         rmBlockList(unblockingIP, unblockedIP);
 
+        //**************************************************************************************************
+    }else if (rqstCmder == "BROADCAST"){
+        assert(nTokens >= 2);
+        string strBroadcast = tokens.at(1);
+        for (int i = 2; i < nTokens; ++i) {
+            strBroadcast = strBroadcast + " " + tokens.at(i);
+        }
+        inBROADCAST(fdaccept,strBroadcast);
+
+        //**************************************************************************************************
+    } else if(rqstCmder == "EXIT"){
+        assert(nTokens == 1);
+        inEXIT(fdaccept);
     }
     else{
-        cout << "[Server::parseRequest] : Request is not LOGIN or LOGOUT or REFRESH or SEND or BLOCK" << endl;
+        cout << "[Server::parseRequest] : Request is not LOGIN or LOGOUT or REFRESH or SEND or BLOCK or Broadcast or exit" << endl;
     }
     return 1;
 
@@ -724,4 +774,58 @@ string Server::onBLOCKED(string _clientIP){
     printf("[BLOCKED:END]\n");
 
     return "blocked";
+}
+
+string Server::inBROADCAST(int fromClientSocket, string msgBroadcast){
+
+    string fromClientIP;
+    string toClientIP;
+
+    //get fromClientIP
+    fromClientIP = findClientIPfromSocket(fromClientSocket);
+    cout << "[inBROADCAST] fromClientIP is:"<<fromClientIP <<"fromClientSocket:"<<fromClientSocket<<endl;
+
+    //给 fromClient 的 msg sent number +1
+    int indexFrom = findIndexOfIpInLIST(fromClientIP);
+    cout << "[inBROADCAST] index of fromClientIP is:"<<indexFrom<<endl;
+
+
+    assert(indexFrom >= 0);
+    loggedInList.at(indexFrom).num_msg_sent += 1;
+
+
+    //对 loggedInList 里面每一个client 遍历处理, 不包括自己
+    for (int i = 0; i < loggedInList.size(); ++i) {
+        toClientIP = loggedInList.at(i).ip_addr;
+
+        //跳过自己
+        if(toClientIP == fromClientIP){
+            continue;
+        }
+
+        if(loggedInList.at(i).status == "logged-in"){
+            if (isClientBeenBlocked(toClientIP, fromClientIP) == 0){
+                int newSocketToClient = connect_to_host(toClientIP, loggedInList.at(i).port_num);
+                sendMsgtoSocket(newSocketToClient, msgBroadcast);
+                loggedInList.at(i).num_msg_rcv += 1;
+                close(newSocketToClient);
+            }else{
+                cout << "[broadcast] the client has been blocked!";  //ignored if blocked
+            }
+
+        }else{ //if logged-out, buffered the messages
+            pair<string, string> tbuf = make_pair(fromClientIP, msgBroadcast);
+            loggedInList.at(i).bufferdMessages.push_back(tbuf);
+        }
+    }
+    return "broadcast";
+}
+
+string Server::inEXIT(int fromClientSocket){
+    string fromClientIP = findClientIPfromSocket(fromClientSocket);
+    int index = findIndexOfIpInLIST(fromClientIP);
+    if(index >= 0){
+        loggedInList.erase(loggedInList.begin()+index);
+    }
+    return "exit";
 }

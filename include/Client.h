@@ -56,7 +56,7 @@ public:
 	string onUNBLOCK(string _clientIP);
 	string onLOGOUT();
 	string onEXIT();
-	// int onBROADCAST();
+    string onBROADCAST(string strBroadcast);
 	// int onSENDFILE(string _clientIP, string _filePath);
 
 	void testSortVector();

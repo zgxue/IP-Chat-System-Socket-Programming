@@ -39,6 +39,7 @@ int Client::start(){
     cout << "This is Client process with port : " << _portStr << endl;
     cout << "test begin***************************************"<<endl;
     testSortVector();
+//    onLOGIN(selfIP, selfPort);
     onLOGIN("128.205.36.46", "30000");
     cout << "test end*****************************************"<<endl;
 
@@ -73,6 +74,10 @@ int Client::startNew(){
     cout << "This is Client process with port : " << _portStr << endl;
     cout << "test begin***************************************"<<endl;
     testSortVector();
+
+    cout << "myIP: "<<selfIP<< endl << "myPort:"<< selfPort;
+
+//    onLOGIN(selfIP, selfPort);
     onLOGIN("128.205.36.46", "30000");
     cout << "test end*****************************************"<<endl;
 
@@ -356,7 +361,19 @@ int Client::parseCmd(string cmd){
 		onLOGOUT();
 		cout << "Finish LOGOUT execution..."<<endl;
 	}
-	else if (cmder == "EXIT") {assert(nToken == 1); onEXIT();}
+	else if (cmder == "EXIT") {
+        assert(nToken == 1);
+        onEXIT();
+
+    }
+    else if(cmder == "BROADCAST"){
+        assert(nToken >= 2);
+        string tmsg = tokens.at(1);
+        for (int i = 2; i < nToken; ++i) {
+            tmsg = tmsg + " " + tokens.at(i);
+        }
+        onBROADCAST(tmsg);
+    }
 	else{std::cerr << "XueError: "<< cmder <<" | NO such commander!" << std::endl;}
   return 1;
 }
@@ -424,12 +441,8 @@ string Client::onLOGIN(string _serverIP, string _serverPort){
 
     sendMsgtoSocket(serverSocket, request);
 
-    string t = recvMsgfromSocket(serverSocket);
-    cout <<"Recv msg is : "<< t <<endl;
-
-
     //接收返回的list
-    t = recvMsgfromSocket(serverSocket);
+    string t = recvMsgfromSocket(serverSocket);
     vector<string> tokens = splitString(t);
     vector<LoggedInListItemClient> vlist;
 
@@ -459,9 +472,6 @@ string Client::onREFRESH(){
     sendMsgtoSocket(serverSocket, request);
 
     string t = recvMsgfromSocket(serverSocket);
-    cout <<"Recv msg is : "<< t <<endl;
-
-    t = recvMsgfromSocket(serverSocket);
     vector<string> tokens = splitString(t);
     vector<LoggedInListItemClient> vlist;
 
@@ -473,24 +483,18 @@ string Client::onREFRESH(){
     }
     loggedInList = vlist;
 
-    cout << "Finish Refresh Step, you can check \"LIST\"." << endl;
+    sendMsgtoSocket(serverSocket, "ACK");
+
+    cout << "Finish Refresh Step, you can check \"LIST\". The new loggedInlist has size: " <<vlist.size()<< endl;
     return "refresh";
 }
 
 string Client::onSEND(string _clientIP, string _msg){
     string request = string("SEND");
-
     request = request + " " + _clientIP + " " + _msg;
-    //request = "SEND 128.205.36.35 sendmessagetest if you can see this in client machine, SEND does well.";
-
     sendMsgtoSocket(serverSocket, request);
 
-    //this is for "echo"
-    string t = recvMsgfromSocket(serverSocket);
-    cout <<"Recv msg is : "<< t <<endl;
-
     return "send";
-
 }
 
 string Client::onBLOCK(string _clientIP){
@@ -498,12 +502,7 @@ string Client::onBLOCK(string _clientIP){
     assert(serverSocket >= 0);
     string request = string("BLOCK");
     request = request + " " + _clientIP;
-
     sendMsgtoSocket(serverSocket, request);
-
-    string t = recvMsgfromSocket(serverSocket);
-    cout <<"Recv msg is : "<< t <<endl;
-
 
     return "block";
 }
@@ -513,15 +512,9 @@ string Client::onUNBLOCK(string _clientIP){
     assert(serverSocket >= 0);
     string request = string("UNBLOCK");
     request = request + " " + _clientIP;
-
     sendMsgtoSocket(serverSocket, request);
 
-    string t = recvMsgfromSocket(serverSocket);
-    cout <<"Recv msg is : "<< t <<endl;
-
-
     return "unblock";
-
 }
 
 string Client::onLOGOUT(){
@@ -529,12 +522,25 @@ string Client::onLOGOUT(){
     assert(serverSocket >= 0);
     string request = string("LOGOUT");
     request = request + " " + selfIP;
-
     sendMsgtoSocket(serverSocket, request);
 
-	string t = recvMsgfromSocket(serverSocket);
-	cout <<"Recv msg is : "<< t <<endl;
-
-	return "logout";  //segmentation fault solved. add this return statement.
+	return "logout";
 }
-string Client::onEXIT(){}
+string Client::onEXIT(){
+    cout << "I'm in onEXIT, and processing with serverSocket: "<<serverSocket << endl;
+    assert(serverSocket >= 0);
+    string request = string("EXIT");
+    sendMsgtoSocket(serverSocket, request);
+    close(serverSocket);
+    return "exit";
+}
+
+string Client::onBROADCAST(string strBroadcast){
+    cout << "I'm in BROADCAST, and processing with serverSocket: "<<serverSocket << endl;
+    assert(serverSocket >= 0);
+    string request = string("BROADCAST");
+    request = request + " " + strBroadcast;
+    sendMsgtoSocket(serverSocket, request);
+
+    return "broadcast";
+}
