@@ -17,6 +17,8 @@
 #include <ifaddrs.h>
 #include <unistd.h>
 #include <iomanip>
+#include <algorithm>
+
 
 
 using namespace std;
@@ -38,47 +40,10 @@ int Client::start(){
     string _portStr = selfPort;
     cout << "This is Client process with port : " << _portStr << endl;
     cout << "test begin***************************************"<<endl;
-    testSortVector();
-//    onLOGIN(selfIP, selfPort);
-    onLOGIN("128.205.36.46", "30000");
-    cout << "test end*****************************************"<<endl;
-
-
-
-    string msgIn;
-    while (TRUE) {
-        std::cout << "[Client@Xue589]$" << std::endl;
-        // char *msg = (char*) malloc(sizeof(char) * MSG_SIZE);
-        // memset(msg, '\0', MSG_SIZE);
-        // if (fgets(msg, MSG_SIZE-1, stdin) == NULL) {
-        // 	exit(-1);
-        // }
-        // printf("I got: %s(size:%d chars)\n", msg, strlen(msg));
-        // std::cout << "SENDing it to the remote server..." << '\n';
-        // if (send(server, msg, strlen(msg), 0) == strlen(msg)) {
-        // 	std::cout << "Done" << std::endl;
-        // }
-
-        cout << "Please input commander: $";
-        getline(cin, msgIn);
-
-        //onLOGIN("128.205.36.46", "30000");
-        parseCmd(msgIn);
-
-    }
-    return 1;
-}
-
-int Client::startNew(){
-    string _portStr = selfPort;
-    cout << "This is Client process with port : " << _portStr << endl;
-    cout << "test begin***************************************"<<endl;
-    testSortVector();
-
+    //testSortVector();
     cout << "myIP: "<<selfIP<< endl << "myPort:"<< selfPort;
 
-//    onLOGIN(selfIP, selfPort);
-    onLOGIN("128.205.36.46", "30000");
+//    onLOGIN("128.205.36.46", "30000");  //一开始是这个导致author 通过不，应为 client 登陆会出问题，server 的 port 是 grader 随机指定的。
     cout << "test end*****************************************"<<endl;
 
 
@@ -155,6 +120,11 @@ int Client::startNew(){
 
                         //todo: process PA1 commands here
                         string tempCmd = string(cmd);
+
+                        if (tempCmd.length() != 0 && (tempCmd[tempCmd.length()-1] == '\n')) { //去掉回车
+                            tempCmd = tempCmd.substr(0, tempCmd.length()-1);
+                        }
+
                         parseCmd(tempCmd);
 
                         free(cmd);
@@ -190,8 +160,13 @@ int Client::startNew(){
                         }
                         else{
                             //process incomming data from exiting clients
-                            std::cout << "[select]Remote sent me: " << buffer << endl;
+//                            std::cout << "[select]Remote sent me: " << buffer << endl;
                             string msgStr = string(buffer);
+
+                            cse4589_print_and_log("[RECEIVED:SUCCESS]\n");
+                            cse4589_print_and_log("msg from:%s\n", getHeaderOfString(msgStr).c_str());
+                            cse4589_print_and_log("[msg]:%s\n",getRestAfterRMHeader(msgStr).c_str());
+                            cse4589_print_and_log("[RECEIVED:END]\n");
 
                         }
                         free(buffer);
@@ -230,12 +205,88 @@ string Client::getMyHostName(){
 	free(msg);
 	return ret;
 }
+string Client::getMyIP(){
+    struct ifaddrs *ifaddr, *ifa;
+    struct sockaddr_in *sa;
+    char *ip_addr;
+
+    if(getifaddrs (&ifaddr) == -1){
+        std::cerr << "XueError: getifaddrs == -1 [Client:onIP]" << std::endl;
+        return "";
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL){
+            continue;
+        }
+        if (ifa->ifa_addr->sa_family==AF_INET && strncmp(ifa->ifa_name,"eth0",BUFFER_SIZE)==0) {
+            sa = (struct sockaddr_in *) ifa->ifa_addr;
+            ip_addr = inet_ntoa(sa->sin_addr);
+        }
+    }
+    freeifaddrs(ifaddr);
+    return string(ip_addr);
+}
+bool Client::isIPinLoggedInList(string ip){
+    vector<LoggedInListItemClient> cacheList = loggedInList;
+    for (int i = 0; i < cacheList.size(); ++i) {
+        if(cacheList.at(i).ip_addr == ip){
+            return true;
+        }
+    }
+    return false;
+}
+bool Client::isIPinBlockedList(string ip){
+    vector<string> cacheList = Gblockedlist;
+    for (int i = 0; i < cacheList.size(); ++i) {
+        if(cacheList.at(i) == ip){
+            return true;
+        }
+    }
+    return false;
+}
+bool Client::isValidIP(string ip){
+    struct sockaddr_in sa;
+    int result = inet_pton(AF_INET, ip.c_str(), &(sa.sin_addr));
+    if(result == 0){
+        return false;
+    }
+    return true;
+
+/*
+    vector<int> tokens;
+    char str[20];
+    for(int i=0;i<20;i++){
+        str[i]=ip.c_str()[i];
+    }
+    char *pch;
+    pch = strtok(str, ".");
+    while (pch != NULL){
+        tokens.push_back(atoi(pch));
+        pch = strtok(NULL, ".");
+    }
+    if (tokens.size() != 4){
+        return false;
+    }
+    for (int j = 0; j < tokens.size(); ++j) {
+        ;
+    }
+*/
+}
+bool Client::isValidPort(string port){
+    int result = atoi(port.c_str());
+
+    if (result >= 1 && result <= 65535){
+        return true;
+    }
+    return false;
+}
+
 int Client::sendMsgtoSocket(int _socket, string msg){
-	std::cout << "SENDing it to the remote server...";
 	if (send(_socket, msg.c_str(), msg.length(), 0) == msg.length()) {
-		std::cout << "Done!" << std::endl;
-	}
-	return 1;
+        return 1;
+    }
+	return 0;
 }
 string Client::recvMsgfromSocket(int _socket){
 	//initialize buffer to receive response
@@ -261,7 +312,10 @@ string Client::recvMsgfromSocketWithLoop(int _socket){
     free(buffer);
     return ret;
 }
-
+void Client::errorLogPrint(string cmder){
+    cse4589_print_and_log("[%s:ERROR]\n",cmder.c_str());
+    cse4589_print_and_log("[%s:END]\n", cmder.c_str());
+}
 
 
 vector<string> Client::splitString(string str){
@@ -273,156 +327,153 @@ vector<string> Client::splitString(string str){
     }
     return tokens;
 }
+string Client::getHeaderOfString(string str){
+
+    int ind = str.find_first_of(" ");
+    if (str.length() > 0 && ind == string::npos) {
+        return str;
+    }
+    if(ind >= 0){
+        string Header = str.substr(0, ind);
+        return Header;
+    }
+    return "";
+}
+string Client::getRestAfterRMHeader(string str){
+    int ind = str.find_first_of(" ");
+    if (ind >= 0 && str.length() > ind+1 ){
+        string buffstr = str.substr(ind + 1);
+        return buffstr;
+    }
+    return "";
+}
+int Client::getNumOfSegmentsOfString(string str){
+    if (str == ""){
+        return 0;
+    }
+    return count(str.begin(), str.end(), ' ') + 1;
+}
+
 
 int Client::parseCmd(string cmd){
-	/**stringstream ss(cmd);
-	string token[ARGN_MAX];
-	int nToken = 0;
-	while (ss >> token[nToken] && nToken < ARGN_MAX) {
-		nToken++;
-	}
-	if (nToken == 0) {
-		exit(-1);
-	}*/
-
-	stringstream ss(cmd);
-	vector<string> tokens;
-	string tkn;
-	while (ss >> tkn) {
-		tokens.push_back(tkn);
-	}
-	if (tokens.size() == 0) {
-		exit(-1);
-	}
-
 
 	//Process cmds
-	string cmder = tokens.at(0);
-	int nToken = tokens.size();
+	string cmder = getHeaderOfString(cmd);
+    string restcmd = getRestAfterRMHeader(cmd);
+	int nToken = getNumOfSegmentsOfString(cmd);  //至少有的空格数目 + 1
+
+//    printf("[parseCmd]%s\n", cmd.c_str());
+//    printf("[parseCmd]%s, %s, %d\n", cmder.c_str(), restcmd.c_str(), nToken);
 
 	if (cmder == "AUTHOR") {
-		assert(nToken == 1);
-		string myUBIT = onAUTHOR();
-		assert(myUBIT != "");
-		printf("[%s:SUCCESS]\n",cmder.c_str());
-		printf("I, %s, have read and understood the course academic integrity policy.\n", myUBIT.c_str());
-		printf("[%s:END]\n", cmder.c_str());
+        if(nToken != 1){ errorLogPrint(cmder);return 0; }
+		onAUTHOR();
 	}
 	else if (cmder == "IP") {
-		assert(nToken == 1);
-		string ip_addr = onIP();
-		if(ip_addr != ""){
-			printf("[%s:SUCCESS]\n",cmder.c_str());
-			printf("IP:%s\n",ip_addr.c_str());
-			printf("[%s:END]\n", cmder.c_str());
-		}else{
-			printf("[%s:ERROR]\n",cmder.c_str());
-			printf("[%s:END]\n", cmder.c_str());
-		}
+        if(nToken != 1){ errorLogPrint(cmder);return 0; }
+		onIP();
 	}
 	else if (cmder == "PORT") {
-		assert(nToken == 1);
-		string port_num = onPORT();
-		if(port_num != ""){
-			printf("[%s:SUCCESS]\n",cmder.c_str());
-			printf("IP:%s\n",port_num.c_str());
-			printf("[%s:END]\n", cmder.c_str());
-		}else{
-			printf("[%s:ERROR]\n",cmder.c_str());
-			printf("[%s:END]\n", cmder.c_str());
-		}
+        if(nToken != 1){ errorLogPrint(cmder);return 0; }
+		onPORT();
 	}
-
-	else if (cmder == "LIST") {assert(nToken == 1); onLIST();}
+	else if (cmder == "LIST") {
+        if(!logStatus || nToken != 1){ errorLogPrint(cmder);return 0; }
+        onLIST();
+    }
 	else if (cmder == "LOGIN") {
-        cout << "Compare if cmder is LOGIN..."<<endl;
-        assert(nToken == 3);
-        onLOGIN(tokens.at(1), tokens.at(2));
-        cout << "Finish onLOGIN execution..."<<endl;
+        if(nToken != 3){ errorLogPrint(cmder);return 0; }
+
+        string ip = getHeaderOfString(restcmd);
+        string rest = getRestAfterRMHeader(restcmd);
+        string port = getHeaderOfString(rest);
+
+        onLOGIN(ip, port);
     }
     else if (cmder == "REFRESH") {
-        assert(nToken == 1);
+        if(!logStatus || nToken != 1){ errorLogPrint(cmder);return 0; }
         onREFRESH();
-        cout << "Finish onREFRESH execution..."<<endl;
     }
     else if (cmder == "SEND") {
-        assert(nToken >= 3);
-        string tmsg = tokens.at(2);
-        for (int i = 3; i < nToken; ++i) {
-            tmsg = tmsg + " " + tokens.at(i);
-        }
-        onSEND(tokens.at(1), tmsg);
+        if(!logStatus || nToken < 3){ errorLogPrint(cmder);return 0; }
+
+        string ip = getHeaderOfString(restcmd);
+        string tmsg = getRestAfterRMHeader(restcmd);
+
+//        printf("[parseCmd] after Send: ip=%s, tmsg=%s\n",ip.c_str(), tmsg.c_str());
+
+        onSEND(ip, tmsg);
     }
-    else if (cmder == "BLOCK") {assert(nToken == 2); onBLOCK(tokens.at(1));}
-    else if (cmder == "UNBLOCK") {assert(nToken == 2); onUNBLOCK(tokens.at(1));}
+    else if (cmder == "BLOCK") {
+        if(!logStatus || nToken != 2){ errorLogPrint(cmder);return 0; }
+        string ip = getHeaderOfString(restcmd);
+        onBLOCK(ip);
+    }
+    else if (cmder == "UNBLOCK") {
+        if(!logStatus || nToken != 2){ errorLogPrint(cmder);return 0; }
+        string ip = getHeaderOfString(restcmd);
+        onUNBLOCK(ip);
+    }
     else if (cmder == "LOGOUT") {
-		cout << "Compare if cmder is LOGOUT..."<<endl;
-		assert(nToken == 1);
+        if(!logStatus || nToken != 1){ errorLogPrint(cmder);return 0; }
 		onLOGOUT();
-		cout << "Finish LOGOUT execution..."<<endl;
 	}
 	else if (cmder == "EXIT") {
-        assert(nToken == 1);
+        if(nToken != 1){ errorLogPrint(cmder);return 0; }
         onEXIT();
-
     }
     else if(cmder == "BROADCAST"){
-        assert(nToken >= 2);
-        string tmsg = tokens.at(1);
-        for (int i = 2; i < nToken; ++i) {
-            tmsg = tmsg + " " + tokens.at(i);
-        }
-        onBROADCAST(tmsg);
+        if(!logStatus || nToken < 2){ errorLogPrint(cmder);return 0; }
+        onBROADCAST(restcmd);
     }
-	else{std::cerr << "XueError: "<< cmder <<" | NO such commander!" << std::endl;}
+	else{
+        std::cerr << "XueError: "<< cmder <<" | NO such commander!" << std::endl;
+        errorLogPrint(cmder);
+        return 0;
+    }
   return 1;
 }
 
 string Client::onAUTHOR(){
-	string myUBIT = "zhenggan";
-	return myUBIT;
-	// printf("I, %s, have read and understood the course academic integrity policy.\n", myUBIT.c_str());
+    cse4589_print_and_log("[AUTHOR:SUCCESS]\n");
+    cse4589_print_and_log("I, zhenggan, have read and understood the course academic integrity policy.\n");
+    cse4589_print_and_log("[AUTHOR:END]\n");
+    return "zhenggan";
 }
 string Client::onIP(){
-	struct ifaddrs *ifaddr, *ifa;
-  struct sockaddr_in *sa;
-  char *ip_addr;
-
-  if(getifaddrs (&ifaddr) == -1){
-		std::cerr << "XueError: getifaddrs == -1 [Client:onIP]" << std::endl;
-		return "";
-	}
-
-  for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL){
-			continue;
-		}
-  	if (ifa->ifa_addr->sa_family==AF_INET && strncmp(ifa->ifa_name,"eth0",BUFFER_SIZE)==0) {
-    	sa = (struct sockaddr_in *) ifa->ifa_addr;
-      ip_addr = inet_ntoa(sa->sin_addr);
+    if(selfIP != ""){
+        cse4589_print_and_log("[IP:SUCCESS]\n");
+        cse4589_print_and_log("IP:%s\n",selfIP.c_str());
+        cse4589_print_and_log("[IP:END]\n");
+    }else{
+        cse4589_print_and_log("[IP:ERROR]\n");
+        cse4589_print_and_log("[IP:END]\n");
     }
-  }
-
-    freeifaddrs(ifaddr);
-    return string(ip_addr);
+    return selfIP;
 }
 string Client::onPORT(){
-	return selfPort;
+    if(selfPort != ""){
+        cse4589_print_and_log("[PORT:SUCCESS]\n");
+        cse4589_print_and_log("PORT:%s\n",selfPort.c_str());
+        cse4589_print_and_log("[PORT:END]\n");
+    }else{
+        cse4589_print_and_log("[PORT:ERROR]\n");
+        cse4589_print_and_log("[PORT:END]\n");
+    }
+    return selfPort;
 }
 
 string Client::onLIST(){
+
     vector<LoggedInListItemClient> resultList = loggedInList;
 
-    printf("[LIST:SUCCESS]\n");
+    cse4589_print_and_log("[LIST:SUCCESS]\n");
     for (int j = 0; j < resultList.size(); ++j) {
         LoggedInListItemClient t = resultList.at(j);
-        cout << setw(2) <<j+1
-             << " : " <<setw(30)<< t.hostname
-             << " : " <<setw(15)<< t.ip_addr
-             << " : " <<setw(5)<< t.port_num
-             <<endl;
+        cse4589_print_and_log("%-5d%-35s%-20s%-8d\n", j+1, t.hostname.c_str(), t.ip_addr.c_str(), t.port_num);
     }
-    printf("[LIST:END]\n");
+    cse4589_print_and_log("[LIST:END]\n");
+
     return "list";
 }
 
@@ -433,13 +484,18 @@ string Client::onLOGIN(string _serverIP, string _serverPort){
     /**
     * 1, 发送自己的信息给 server处理，2， 接收 server 发来的信息并处理。
     */
+    if(!isValidIP(_serverIP) || !isValidPort(_serverPort)){
+        errorLogPrint("LOGIN");
+        return "exception";
+    }
+
     serverSocket = connect_to_host(_serverIP, atoi(_serverPort.c_str()));
     server_ip = _serverIP;
     server_port = _serverPort;
 
     string request = string("LOGIN") +" "+ selfHostName +" "+ selfIP +" "+ selfPort;
-
     sendMsgtoSocket(serverSocket, request);
+
 
     //接收返回的list
     string t = recvMsgfromSocket(serverSocket);
@@ -459,9 +515,22 @@ string Client::onLOGIN(string _serverIP, string _serverPort){
     //接收返回的buffered messages
     string tmp_msg;
     while ((tmp_msg = recvMsgfromSocket(serverSocket)) != "END"){
-        cout << "I got buffered message: " << tmp_msg << endl;
+//        cout << "I got buffered message: " << tmp_msg << endl;
+
+        string msgfrom = getHeaderOfString(tmp_msg);
+        string buffstr = getRestAfterRMHeader(tmp_msg);
+
+        cse4589_print_and_log("[RECEIVED:SUCCESS]\n");
+        cse4589_print_and_log("msg from:%s\n",msgfrom.c_str());
+        cse4589_print_and_log("[msg]:%s\n",buffstr.c_str());
+        cse4589_print_and_log("[RECEIVED:END]\n");
+
         sendMsgtoSocket(serverSocket, "ACK");
     }
+    logStatus = true;
+
+    cse4589_print_and_log("[LOGIN:SUCCESS]\n");
+    cse4589_print_and_log("[LOGIN:END]\n");
 
     cout << "Finish Loggin Step, you can check \"LIST\"." <<endl;
 	return "loggedin"; //can be ignored
@@ -490,26 +559,59 @@ string Client::onREFRESH(){
 }
 
 string Client::onSEND(string _clientIP, string _msg){
+    if(!isValidIP(_clientIP) || !isIPinLoggedInList(_clientIP)){
+//        cout << "isValidIP:"<<isValidIP(_clientIP) <<endl;
+//        cout << "isIPinLoggedInList:"<<isIPinLoggedInList(_clientIP)<<endl;
+        errorLogPrint("SEND");
+        return "exception";
+    }
+
     string request = string("SEND");
     request = request + " " + _clientIP + " " + _msg;
     sendMsgtoSocket(serverSocket, request);
+
+    cse4589_print_and_log("[SEND:SUCCESS]\n");
+    cse4589_print_and_log("[SEND:END]\n");
 
     return "send";
 }
 
 string Client::onBLOCK(string _clientIP){
     cout << "I'm in BLOCK, and processing with serverSocket: "<<serverSocket << endl;
-    assert(serverSocket >= 0);
+
+    //exceptions, 1, 是否 clietnip 在本地的 loggedinlist 中 2, 是否已经 blocked 了
+    if(!isValidIP(_clientIP)){
+        errorLogPrint("BLOCK");
+        return "exception";
+    }
+
+    bool hasBeenBlocked = isIPinBlockedList(_clientIP);
+    bool notInLocalLoggedInList = !isIPinLoggedInList(_clientIP);
+
+    if (hasBeenBlocked || notInLocalLoggedInList){
+        errorLogPrint("BLOCK");
+        return "exception";
+    }
+
     string request = string("BLOCK");
     request = request + " " + _clientIP;
     sendMsgtoSocket(serverSocket, request);
+    Gblockedlist.push_back(_clientIP);
+    cse4589_print_and_log("[BLOCK:SUCCESS]\n");
+    cse4589_print_and_log("[BLOCK:END]\n");
 
     return "block";
 }
 
 string Client::onUNBLOCK(string _clientIP){
     cout << "I'm in UNBLOCK, and processing with serverSocket: "<<serverSocket << endl;
-    assert(serverSocket >= 0);
+
+    if(!isValidIP(_clientIP) || !isIPinBlockedList(_clientIP) || !isIPinLoggedInList(_clientIP)){
+        errorLogPrint("UNBLOCK");
+        return "exception";
+    }
+
+//    assert(serverSocket >= 0);
     string request = string("UNBLOCK");
     request = request + " " + _clientIP;
     sendMsgtoSocket(serverSocket, request);
@@ -519,28 +621,36 @@ string Client::onUNBLOCK(string _clientIP){
 
 string Client::onLOGOUT(){
 	cout << "I'm in onLOGOUT, and processing with serverSocket: "<<serverSocket << endl;
-    assert(serverSocket >= 0);
+//    assert(serverSocket >= 0);
     string request = string("LOGOUT");
     request = request + " " + selfIP;
     sendMsgtoSocket(serverSocket, request);
+    logStatus = false;
 
+    cse4589_print_and_log("[LOGOUT:SUCCESS]\n");
+    cse4589_print_and_log("[LOGOUT:END]\n");
 	return "logout";
 }
 string Client::onEXIT(){
     cout << "I'm in onEXIT, and processing with serverSocket: "<<serverSocket << endl;
-    assert(serverSocket >= 0);
+//    assert(serverSocket >= 0);
     string request = string("EXIT");
     sendMsgtoSocket(serverSocket, request);
+    cse4589_print_and_log("[EXIT:SUCCESS]\n");
+    cse4589_print_and_log("[EXIT:END]\n");
     close(serverSocket);
+    exit(-1);
     return "exit";
 }
 
 string Client::onBROADCAST(string strBroadcast){
     cout << "I'm in BROADCAST, and processing with serverSocket: "<<serverSocket << endl;
-    assert(serverSocket >= 0);
+//    assert(serverSocket >= 0);
     string request = string("BROADCAST");
     request = request + " " + strBroadcast;
     sendMsgtoSocket(serverSocket, request);
+    cse4589_print_and_log("[BROADCAST:SUCCESS]\n");
+    cse4589_print_and_log("[BROADCAST:END]\n");
 
     return "broadcast";
 }

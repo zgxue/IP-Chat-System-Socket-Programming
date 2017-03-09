@@ -8,7 +8,7 @@
 #define STDIN 0
 #define TRUE 1
 #define CMD_SIZE 100
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 512
 #define MSG_SIZE 256
 
 /* the maximum num of parameters which accepted in Server/Client

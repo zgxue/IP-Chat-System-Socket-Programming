@@ -21,7 +21,7 @@ private:
 public:
 	Server(string _port)
 		:selfPort(_port),
-		selfIP(onIP()),
+		selfIP(getMyIP()),
 		selfHostName(getMyHostName())
 		{}
 
@@ -30,6 +30,7 @@ public:
     int parseCmd(string cmd); //Cmd from stdin
 	int parseRequest(int fdaccept, string requestStr);  //request from sockets
 	string getMyHostName();
+    string getMyIP();
 	int sendMsgtoSocket(int _socket, string msg);
 	string recvMsgfromSocket(int _socket);
     int sendMsgtoSocketWithLength(int _socket);
@@ -48,9 +49,11 @@ public:
     int isClientLoggedIn(string clientIP);
     int findIndexOfIpInLIST(string clientIP);
     string findClientIPfromSocket(int clientSocket);
+    void errorLogPrint(string cmder);
 
 
-	//both
+
+    //both
 	string onAUTHOR();
  	string onIP();
 	string onPORT();
@@ -60,7 +63,12 @@ public:
 	string onBLOCKED(string _clientIP);
 
     string inBROADCAST(int fromClientSocket, string msgBroadcast);
+    string inSEND(int fromClientSocket, string toClientIP, string msgSend);
     string inEXIT(int fromClientSocket);
+
+    string getHeaderOfString(string str);
+    string getRestAfterRMHeader(string str);
+    int getNumOfSegmentsOfString(string str);  //at least
 
 
 

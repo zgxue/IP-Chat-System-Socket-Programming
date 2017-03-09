@@ -75,8 +75,7 @@ int main(int argc, char **argv){
 		myServer.start();
 	}else if (indicatorStr =="c") {
 		Client myClient = Client(portStr);
-//		myClient.start();
-		myClient.startNew();
+		myClient.start();
 	}else{
 		std::cerr << "XueError:First parameter should be 'c' or 's..'" << '\n';
 	}

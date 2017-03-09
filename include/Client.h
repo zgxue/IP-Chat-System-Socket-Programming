@@ -15,8 +15,10 @@ private:
 	string server_ip;
 	string server_port;
 	string selfHostName;
+    int serverSocket;
+    bool logStatus;  //0 loggedout, 1 loggedin
+    vector<string> Gblockedlist;
 
-  int serverSocket;
 
   // todo: 需要一个结构来维护logged in 的 client List数据,REFRESER 会从 server 获取新的
   // login 和 refresher 都会请求最近的 list。
@@ -26,24 +28,31 @@ private:
 public:
 	Client(string _port)
 		: selfPort(_port),
-		selfIP(onIP()),
+		selfIP(getMyIP()),
 		server_ip(""),
 		server_port(""),
 		selfHostName(getMyHostName()),
-        serverSocket(-1)
+        serverSocket(-1),
+        logStatus(false)
 		{}
 
 	int start();
-    int startNew();
 	int connect_to_host(string server_ip, int server_port);//返回成功连接的remoteServer 的 fdsocket
 	int parseCmd(string cmd);
 	int sendMsgtoSocket(int _socket, string msg);
 	string recvMsgfromSocket(int _socket);
     string recvMsgfromSocketWithLoop(int _socket);
+    void errorLogPrint(string cmder);
 
 	string getMyHostName();
+    string getMyIP();
+    bool isIPinLoggedInList(string ip);
+    bool isIPinBlockedList(string ip);
+    bool isValidIP(string ip);
+    bool isValidPort(string port);
 
-	string onAUTHOR();
+
+    string onAUTHOR();
 	string onIP();
 	string onPORT();
 	string onLIST();
@@ -61,6 +70,10 @@ public:
 
 	void testSortVector();
     vector<string> splitString(string str);
+    string getHeaderOfString(string str);
+    string getRestAfterRMHeader(string str);
+    int getNumOfSegmentsOfString(string str);  //at least
+
 
 };
 
