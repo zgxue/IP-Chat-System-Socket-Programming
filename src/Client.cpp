@@ -161,12 +161,47 @@ int Client::start(){
                         else{
                             //process incomming data from exiting clients
 //                            std::cout << "[select]Remote sent me: " << buffer << endl;
-                            string msgStr = string(buffer);
+                            string wholeMsgStr = string(buffer);
+                            string header = getHeaderOfString(wholeMsgStr);
+                            string msgStr = getRestAfterRMHeader(wholeMsgStr);
 
-                            cse4589_print_and_log("[RECEIVED:SUCCESS]\n");
-                            cse4589_print_and_log("msg from:%s\n", getHeaderOfString(msgStr).c_str());
-                            cse4589_print_and_log("[msg]:%s\n",getRestAfterRMHeader(msgStr).c_str());
-                            cse4589_print_and_log("[RECEIVED:END]\n");
+                            if(header == "MSG"){
+                                cse4589_print_and_log("[RECEIVED:SUCCESS]\n");
+                                cse4589_print_and_log("msg from:%s\n", getHeaderOfString(msgStr).c_str());
+                                cse4589_print_and_log("[msg]:%s\n",getRestAfterRMHeader(msgStr).c_str());
+                                cse4589_print_and_log("[RECEIVED:END]\n");
+                            }else if(header == "FILE"){
+
+                                //先检查文件是否可创建
+                                string filename = msgStr;
+                                FILE *fp = fopen(filename.c_str(), "wb");  //以二进制方式打开文件
+                                if(fp == NULL){
+                                    cerr << "[inStart]Cannot open file" <<endl;
+                                    sendMsgtoSocket(fdaccept, "NO");
+                                }else{
+                                    sendMsgtoSocket(fdaccept, "OK");
+                                }
+
+                                //循环写文件
+                                char *buffer = (char*) malloc(sizeof(char) * BUFFER_SIZE);
+                                memset(buffer, '\0', BUFFER_SIZE);
+                                int nCount;
+
+                                cout << "starting recving and writing data to file." <<endl;
+
+                                while( (nCount = recv(fdaccept, buffer, BUFFER_SIZE, 0)) > 0 ){
+                                    fwrite(buffer, nCount, 1, fp);
+                                }
+                                fclose(fp);
+
+                                cout << "done!"<<endl;
+                                cse4589_print_and_log("[FILERECEIVED:SUCCESS]\n");
+                                cse4589_print_and_log("[FILERECEIVED:END]\n");
+
+                            }else{
+                                cerr<<"[instart] Unrecognized header found. Neither MSG nor FILE." << endl;
+                            }
+
 
                         }
                         free(buffer);
@@ -426,6 +461,12 @@ int Client::parseCmd(string cmd){
         if(!logStatus || nToken < 2){ errorLogPrint(cmder);return 0; }
         onBROADCAST(restcmd);
     }
+    else if(cmder == "SENDFILE"){
+        if(!logStatus || nToken < 3){ errorLogPrint(cmder);return 0; }
+        string destIP = getHeaderOfString(restcmd);
+        string filename = getRestAfterRMHeader(restcmd);
+        onSENDFILE(destIP, filename);
+    }
 	else{
         std::cerr << "XueError: "<< cmder <<" | NO such commander!" << std::endl;
         errorLogPrint(cmder);
@@ -654,3 +695,64 @@ string Client::onBROADCAST(string strBroadcast){
 
     return "broadcast";
 }
+int Client::onSENDFILE(string destIP, string filename){
+    if(!isValidIP(destIP) || !isIPinLoggedInList(destIP)){
+        errorLogPrint("SENDFILE");
+        return 0;
+    }
+
+    //find the port of destIP in local List
+    int destPort = -1;
+    for (int i = 0; i < loggedInList.size(); ++i) {
+        if (loggedInList.at(i).ip_addr == destIP){
+            destPort = loggedInList.at(i).port_num;
+            break;
+        }
+    }
+    if (destPort == -1){
+        errorLogPrint("SENDFILE");
+        return 0;
+    }
+
+    //先检查文件是否存在
+    FILE *fp = fopen(filename.c_str(), "rb");  //以二进制方式打开文件
+    if(fp == NULL){
+        cerr << "[onSENDFILE]Cannot open file\n" << endl;
+        errorLogPrint("SENDFILE");
+        return 0;
+    }
+
+
+    //try to connect and send hi-msg "FILE", means "I have a file, do you want to accept it?"
+    int newSocketToClient;
+    if ( (newSocketToClient = connect_to_host(destIP, destPort)) >= 0  ){
+
+        string blankStr = "";
+        sendMsgtoSocket(newSocketToClient, blankStr+"FILE" +" " + filename);
+        string firstResp = recvMsgfromSocket(newSocketToClient);
+        if (firstResp == "OK"){
+            cout << "Client says 'OK', prepare send file looply" << endl;
+            //循环发送，到文件结尾F
+            char *buffer = (char*) malloc(sizeof(char) * BUFFER_SIZE);
+            memset(buffer, '\0', BUFFER_SIZE);
+            int nCount;
+            while( (nCount = fread(buffer, 1, BUFFER_SIZE, fp)) > 0 ){
+                send(newSocketToClient, buffer, nCount, 0);
+            }
+            fclose(fp);
+            close(newSocketToClient);
+            cse4589_print_and_log("[FILESEND:SUCCESS]\n");
+            cse4589_print_and_log("[FILESEND:END]\n");
+
+        }else{ //client refuse to accept it
+            close(newSocketToClient);
+            errorLogPrint("SENDFILE");
+            return 0;
+        }
+    }else{
+        errorLogPrint("SENDFILE");
+        return 0;
+    }
+    return 1;
+}
+

@@ -456,8 +456,8 @@ int Server::parseRequest(int fdaccept, string requestStr){
         int ind = findIndexOfIpInLIST(findClientIPfromSocket(fdaccept));
         if(ind >= 0){
             for (int j = 0; j < loggedInList.at(ind).bufferdMessages.size(); ++j) {
-                string t = "";
-                t = t + loggedInList.at(ind).bufferdMessages.at(j).first
+                string header = "MSG";
+                string t = header + loggedInList.at(ind).bufferdMessages.at(j).first
                         +" " + loggedInList.at(ind).bufferdMessages.at(j).second;
                 sendMsgtoSocket(fdaccept, t);
                 recvMsgfromSocket(fdaccept);  //wait "ACK"
@@ -839,7 +839,8 @@ string Server::inSEND(int fromClientSocket, string _toClientIP, string msgSend){
             if(loggedInList.at(i).status == "logged-in"){
                 if (isClientBeenBlocked(_toClientIP, fromClientIP) == 0){
                     int newSocketToClient = connect_to_host(_toClientIP, loggedInList.at(i).port_num);
-                    string strSend = fromClientIP + " " + msgSend;
+                    string header = "MSG";
+                    string strSend = header + " " + fromClientIP + " " + msgSend;
                     sendMsgtoSocket(newSocketToClient, strSend);
                     loggedInList.at(i).num_msg_rcv += 1;
                     close(newSocketToClient);
@@ -897,7 +898,8 @@ string Server::inBROADCAST(int fromClientSocket, string msgBroadcast){
         if(loggedInList.at(i).status == "logged-in"){
             if (isClientBeenBlocked(toClientIP, fromClientIP) == 0){
                 int newSocketToClient = connect_to_host(toClientIP, loggedInList.at(i).port_num);
-                string strSend = fromClientIP + " " + msgBroadcast;
+                string header = "MSG";
+                string strSend = header + " " + fromClientIP + " " + msgBroadcast;
                 sendMsgtoSocket(newSocketToClient, strSend);
                 loggedInList.at(i).num_msg_rcv += 1;
                 close(newSocketToClient);

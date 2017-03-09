@@ -66,7 +66,7 @@ public:
 	string onLOGOUT();
 	string onEXIT();
     string onBROADCAST(string strBroadcast);
-	// int onSENDFILE(string _clientIP, string _filePath);
+    int onSENDFILE(string destIP, string filename);
 
 	void testSortVector();
     vector<string> splitString(string str);
