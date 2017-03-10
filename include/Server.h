@@ -69,6 +69,8 @@ public:
     string getHeaderOfString(string str);
     string getRestAfterRMHeader(string str);
     int getNumOfSegmentsOfString(string str);  //at least
+    string to3charInt(int number);
+
 
 
 

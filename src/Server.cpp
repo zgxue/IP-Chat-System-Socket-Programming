@@ -209,6 +209,30 @@ int Server::getNumOfSegmentsOfString(string str){
     }
     return count(str.begin(), str.end(), ' ') + 1;
 }
+string Server::to3charInt(int number){
+    //只能转换000-999之间的数
+    if(number < 0 || number > 999){
+        return "";
+    }
+
+    stringstream ss;
+    ss << number;
+    string rawNumberStr = ss.str();
+
+    //固定三个字符长度为表示后续字符串的长度表示。
+    string numberStr;
+    if (rawNumberStr.length() == 1) {
+        numberStr = "00";
+        numberStr += rawNumberStr;
+    }else if (rawNumberStr.length() == 2) {
+        numberStr = "0";
+        numberStr += rawNumberStr;
+    }else {
+        numberStr += rawNumberStr;
+    }
+    return numberStr;
+
+}
 
 
 
@@ -273,6 +297,8 @@ int Server::start(){
 
 	head_socket = server_socket;
 
+    string taskStr;
+
 	while (TRUE) {
 		memcpy(&watch_list, &master_list, sizeof(master_list));
 
@@ -325,6 +351,10 @@ int Server::start(){
 						//initialize buffer to receive response
 						char *buffer = (char*) malloc(sizeof(char) * BUFFER_SIZE);
 						memset(buffer, '\0', BUFFER_SIZE);
+
+                        //每次读取标头的3个 char 指定的长度，然后 parse 解析执行。
+
+
 						if (recv(sock_index, buffer, BUFFER_SIZE, 0) <= 0) {
 							close(sock_index);
 							std::cout << "Remote Host's connection is terminated." << '\n';
@@ -333,12 +363,14 @@ int Server::start(){
 							FD_CLR(sock_index, &master_list);
 						}
 						else{
-							//process incomming data from exiting clients
-							std::cout << "Client sent me: " << buffer << endl;
-                            //process request sent by existing sockets
-                            string requestStr = string(buffer);
-//                            parseRequest(fdaccept, requestStr);
-                            parseRequest(sock_index, requestStr);
+                            taskStr += string(buffer);
+
+                            while( (taskStr.length() >= 3) && (atoi(taskStr.substr(0,3).c_str()) <= taskStr.length()-3) ){
+                                string requestStr = taskStr.substr(3, atoi(taskStr.substr(0,3).c_str()));
+                                std::cout << "Client sent me: " << requestStr.c_str() << endl;
+                                parseRequest(sock_index, requestStr);
+                                taskStr = taskStr.substr(3 + atoi(taskStr.substr(0,3).c_str()));
+                            }
 
 						}
 						free(buffer);
@@ -451,13 +483,57 @@ int Server::parseRequest(int fdaccept, string requestStr){
         cout << "just receive: " << recvMsgfromSocket(fdaccept) <<endl; // == "ACK");
 
 
+        int ind = findIndexOfIpInLIST(findClientIPfromSocket(fdaccept));
+        if(ind >= 0){
+
+            int totalLength = 6; //包头的长度信息用6个字节存储,因为不确定
+            //循环一遍确定发包的总长度
+            for (int j = 0; j < loggedInList.at(ind).bufferdMessages.size(); ++j) {
+                string t = loggedInList.at(ind).bufferdMessages.at(j).first
+                           + " " + loggedInList.at(ind).bufferdMessages.at(j).second;
+                totalLength +=  3 + t.length();
+            }
+
+            //把 totalLength 用字符表示出来，占六个字节
+            stringstream s1;
+            s1 << totalLength;
+            string sTotalLength = s1.str();
+            string newSTotalLength;
+            if (sTotalLength.length() == 1){newSTotalLength = "00000"; newSTotalLength += sTotalLength;}
+            else if (sTotalLength.length() == 2){newSTotalLength = "0000"; newSTotalLength += sTotalLength;}
+            else if (sTotalLength.length() == 3){newSTotalLength = "000"; newSTotalLength += sTotalLength;}
+            else if (sTotalLength.length() == 4){newSTotalLength = "00"; newSTotalLength += sTotalLength;}
+            else if (sTotalLength.length() == 5){newSTotalLength = "0"; newSTotalLength += sTotalLength;}
+            else {newSTotalLength = sTotalLength;}
+
+            sendMsgtoSocket(fdaccept, newSTotalLength);
+            //开始新的联合 send buffer msgs
+            for (int i = 0; i < loggedInList.at(ind).bufferdMessages.size(); ++i) {
+                string t = loggedInList.at(ind).bufferdMessages.at(i).first
+                           + " " + loggedInList.at(ind).bufferdMessages.at(i).second;
+                int tlen = t.length();
+
+                string newTlenStr = to3charInt(t.length());
+                assert(newTlenStr.length() == 3);
+
+                t = newTlenStr + t;
+                sendMsgtoSocket(fdaccept, t);
+            }
+
+            //完成后清空
+            loggedInList.at(ind).bufferdMessages.clear();
+        }
+
+
+
+/*
         string strRcv;
 
         int ind = findIndexOfIpInLIST(findClientIPfromSocket(fdaccept));
         if(ind >= 0){
             for (int j = 0; j < loggedInList.at(ind).bufferdMessages.size(); ++j) {
                 string header = "MSG";
-                string t = header + loggedInList.at(ind).bufferdMessages.at(j).first
+                string t = header + " " + loggedInList.at(ind).bufferdMessages.at(j).first
                         +" " + loggedInList.at(ind).bufferdMessages.at(j).second;
                 sendMsgtoSocket(fdaccept, t);
                 recvMsgfromSocket(fdaccept);  //wait "ACK"
@@ -474,7 +550,7 @@ int Server::parseRequest(int fdaccept, string requestStr){
             //完成后清空
             loggedInList.at(ind).bufferdMessages.clear();
         }
-        //printLoggedInList();
+*/
 
       //***********************************************************************************
     }else if(rqstCmder == "LOGOUT"){
@@ -829,7 +905,7 @@ string Server::inSEND(int fromClientSocket, string _toClientIP, string msgSend){
     assert(indexFrom >= 0);
     loggedInList.at(indexFrom).num_msg_sent += 1;
 
-    //对 loggedInList 里面每一个client 遍历处理, 不包括自己
+    //对 loggedInList 里面每一个client 遍历处理, 找到目标
     int i = 0;
     for (i = 0; i < loggedInList.size(); ++i) {
         iterIP = loggedInList.at(i).ip_addr;

@@ -44,6 +44,7 @@ int Client::start(){
     cout << "myIP: "<<selfIP<< endl << "myPort:"<< selfPort;
 
 //    onLOGIN("128.205.36.46", "30000");  //一开始是这个导致author 通过不，应为 client 登陆会出问题，server 的 port 是 grader 随机指定的。
+
     cout << "test end*****************************************"<<endl;
 
 
@@ -164,12 +165,19 @@ int Client::start(){
                             string wholeMsgStr = string(buffer);
                             string header = getHeaderOfString(wholeMsgStr);
                             string msgStr = getRestAfterRMHeader(wholeMsgStr);
+                            cout << "[instart] wholeMsgStr=:"<< wholeMsgStr << endl;
+                            cout << "[instart] header=:"<< header<<endl;
+                            cout << "[instart] msgStr=:"<< msgStr<<endl;
+                            cout << "[instart] getHeaderOfString(msgStr)=:" << getHeaderOfString(msgStr) <<endl;
+                            cout << "[instart] getRestAfterRMHeader(msgStr)=:" << getRestAfterRMHeader(msgStr) <<endl;
 
                             if(header == "MSG"){
+
                                 cse4589_print_and_log("[RECEIVED:SUCCESS]\n");
                                 cse4589_print_and_log("msg from:%s\n", getHeaderOfString(msgStr).c_str());
                                 cse4589_print_and_log("[msg]:%s\n",getRestAfterRMHeader(msgStr).c_str());
                                 cse4589_print_and_log("[RECEIVED:END]\n");
+
                             }else if(header == "FILE"){
 
                                 //先检查文件是否可创建
@@ -388,6 +396,31 @@ int Client::getNumOfSegmentsOfString(string str){
     }
     return count(str.begin(), str.end(), ' ') + 1;
 }
+string Client::to3charInt(int number){
+    //只能转换000-999之间的数
+    if(number < 0 || number > 999){
+        return "";
+    }
+
+    stringstream ss;
+    ss << number;
+    string rawNumberStr = ss.str();
+
+    //固定三个字符长度为表示后续字符串的长度表示。
+    string numberStr;
+    if (rawNumberStr.length() == 1) {
+        numberStr = "00";
+        numberStr += rawNumberStr;
+    }else if (rawNumberStr.length() == 2) {
+        numberStr = "0";
+        numberStr += rawNumberStr;
+    }else {
+        numberStr += rawNumberStr;
+    }
+    return numberStr;
+
+}
+
 
 
 int Client::parseCmd(string cmd){
@@ -535,7 +568,8 @@ string Client::onLOGIN(string _serverIP, string _serverPort){
     server_port = _serverPort;
 
     string request = string("LOGIN") +" "+ selfHostName +" "+ selfIP +" "+ selfPort;
-    sendMsgtoSocket(serverSocket, request);
+    string len = to3charInt(request.length());
+    sendMsgtoSocket(serverSocket, len+request);
 
 
     //接收返回的list
@@ -553,13 +587,52 @@ string Client::onLOGIN(string _serverIP, string _serverPort){
     sendMsgtoSocket(serverSocket, "ACK");
 
 
+    //接收一大串字符串并分析
+    char *buffer = (char*) malloc(sizeof(char) * BUFFER_SIZE);
+    memset(buffer, '\0', BUFFER_SIZE);
+    string ret = "";
+    bool flag = true;
+    int dataLengthRemain = 0;
+
+    int nSize;
+    while ((flag || dataLengthRemain > 0) && (nSize = recv(serverSocket, buffer, BUFFER_SIZE, 0))  >= 0) {
+        ret = ret + string(buffer);
+
+        if(flag && ret.length() >= 6){
+            dataLengthRemain = atoi(ret.substr(0,6).c_str());
+            flag = false;
+        }
+        dataLengthRemain -= nSize;
+    }
+    free(buffer);
+
+    //处理得到的字符串
+    ret = ret.substr(6);
+    for (int i = 0; i < ret.length(); ) {
+        int msgLen = atoi(ret.substr(i,3).c_str());
+        string msg = ret.substr(i+3, msgLen);
+
+        string msgfrom = getHeaderOfString(msg);
+        string buffstr = getRestAfterRMHeader(msg);
+
+        cse4589_print_and_log("[RECEIVED:SUCCESS]\n");
+        cse4589_print_and_log("msg from:%s\n",msgfrom.c_str());
+        cse4589_print_and_log("[msg]:%s\n",buffstr.c_str());
+        cse4589_print_and_log("[RECEIVED:END]\n");
+
+        i = i + 3 + msgLen;
+    }
+
+
+/*
     //接收返回的buffered messages
     string tmp_msg;
     while ((tmp_msg = recvMsgfromSocket(serverSocket)) != "END"){
 //        cout << "I got buffered message: " << tmp_msg << endl;
 
-        string msgfrom = getHeaderOfString(tmp_msg);
-        string buffstr = getRestAfterRMHeader(tmp_msg);
+
+        string msgfrom = getHeaderOfString(getRestAfterRMHeader(tmp_msg));
+        string buffstr = getRestAfterRMHeader(getRestAfterRMHeader(tmp_msg));
 
         cse4589_print_and_log("[RECEIVED:SUCCESS]\n");
         cse4589_print_and_log("msg from:%s\n",msgfrom.c_str());
@@ -568,10 +641,13 @@ string Client::onLOGIN(string _serverIP, string _serverPort){
 
         sendMsgtoSocket(serverSocket, "ACK");
     }
+*/
     logStatus = true;
 
     cse4589_print_and_log("[LOGIN:SUCCESS]\n");
     cse4589_print_and_log("[LOGIN:END]\n");
+
+
 
     cout << "Finish Loggin Step, you can check \"LIST\"." <<endl;
 	return "loggedin"; //can be ignored
@@ -579,7 +655,8 @@ string Client::onLOGIN(string _serverIP, string _serverPort){
 
 string Client::onREFRESH(){
     string request = string("REFRESH");
-    sendMsgtoSocket(serverSocket, request);
+    string len = to3charInt(request.length());
+    sendMsgtoSocket(serverSocket, len+request);
 
     string t = recvMsgfromSocket(serverSocket);
     vector<string> tokens = splitString(t);
@@ -609,7 +686,8 @@ string Client::onSEND(string _clientIP, string _msg){
 
     string request = string("SEND");
     request = request + " " + _clientIP + " " + _msg;
-    sendMsgtoSocket(serverSocket, request);
+    string len = to3charInt(request.length());
+    sendMsgtoSocket(serverSocket, len+request);
 
     cse4589_print_and_log("[SEND:SUCCESS]\n");
     cse4589_print_and_log("[SEND:END]\n");
@@ -636,7 +714,8 @@ string Client::onBLOCK(string _clientIP){
 
     string request = string("BLOCK");
     request = request + " " + _clientIP;
-    sendMsgtoSocket(serverSocket, request);
+    string len = to3charInt(request.length());
+    sendMsgtoSocket(serverSocket, len+request);
     Gblockedlist.push_back(_clientIP);
     cse4589_print_and_log("[BLOCK:SUCCESS]\n");
     cse4589_print_and_log("[BLOCK:END]\n");
@@ -655,7 +734,19 @@ string Client::onUNBLOCK(string _clientIP){
 //    assert(serverSocket >= 0);
     string request = string("UNBLOCK");
     request = request + " " + _clientIP;
-    sendMsgtoSocket(serverSocket, request);
+    string len = to3charInt(request.length());
+    sendMsgtoSocket(serverSocket, len+request);
+
+    //remove _clientIp from local blockedlist
+    for (int i = 0; i < Gblockedlist.size(); ++i) {
+        if(Gblockedlist.at(i) == _clientIP){
+            Gblockedlist.erase(Gblockedlist.begin()+i);
+            break;
+        }
+    }
+
+    cse4589_print_and_log("[UNBLOCK:SUCCESS]\n");
+    cse4589_print_and_log("[UNBLOCK:END]\n");
 
     return "unblock";
 }
@@ -665,7 +756,8 @@ string Client::onLOGOUT(){
 //    assert(serverSocket >= 0);
     string request = string("LOGOUT");
     request = request + " " + selfIP;
-    sendMsgtoSocket(serverSocket, request);
+    string len = to3charInt(request.length());
+    sendMsgtoSocket(serverSocket, len+request);
     logStatus = false;
 
     cse4589_print_and_log("[LOGOUT:SUCCESS]\n");
@@ -676,7 +768,8 @@ string Client::onEXIT(){
     cout << "I'm in onEXIT, and processing with serverSocket: "<<serverSocket << endl;
 //    assert(serverSocket >= 0);
     string request = string("EXIT");
-    sendMsgtoSocket(serverSocket, request);
+    string len = to3charInt(request.length());
+    sendMsgtoSocket(serverSocket, len+request);
     cse4589_print_and_log("[EXIT:SUCCESS]\n");
     cse4589_print_and_log("[EXIT:END]\n");
     close(serverSocket);
@@ -689,7 +782,8 @@ string Client::onBROADCAST(string strBroadcast){
 //    assert(serverSocket >= 0);
     string request = string("BROADCAST");
     request = request + " " + strBroadcast;
-    sendMsgtoSocket(serverSocket, request);
+    string len = to3charInt(request.length());
+    sendMsgtoSocket(serverSocket, len+request);
     cse4589_print_and_log("[BROADCAST:SUCCESS]\n");
     cse4589_print_and_log("[BROADCAST:END]\n");
 
